@@ -1,100 +1,112 @@
 <script lang="ts">
 	import '../app.css';
-	import { getAppState, initializeState } from '$lib/stores/app.svelte';
-	import '$lib/services/pwa';
-	import { onMount, tick } from 'svelte';
+	import { onMount } from 'svelte';
+	import { fade } from 'svelte/transition';
 	import { page } from '$app/state';
-	import { fly } from 'svelte/transition';
-	import { quartOut } from 'svelte/easing';
+	import { dev } from '$app/environment';
+	import { initializeState, refreshToday } from '$lib/stores/app.svelte';
+	import { registerServiceWorker } from '$lib/services/pwa';
+	import { haptic } from '$lib/utils/helpers';
 	import Toast from '$lib/components/Toast.svelte';
-	import { setToastInstance } from '$lib/stores/toast';
-
-	let toastRef: any;
-
-	const appState = getAppState();
-
-	let ready = $state(false);
+	import Icon, { type IconName } from '$lib/components/Icon.svelte';
 
 	let { children } = $props();
 
-	onMount(async () => {
-		try {
-			await initializeState();
-		} catch (e) {
-			console.error('Initialization failed:', e);
-		}
-		ready = true;
+	let status = $state<'loading' | 'ready' | 'error'>('loading');
 
-		// Register toast globally after render
-		await tick();
-		if (toastRef) setToastInstance(toastRef);
+	onMount(() => {
+		initializeState()
+			.then(() => (status = 'ready'))
+			.catch((e) => {
+				console.error('Initialization failed:', e);
+				status = 'error';
+			});
+
+		if (!dev) registerServiceWorker();
+
+		// Keep "today" correct when the app resumes after midnight.
+		const onresume = () => document.visibilityState === 'visible' && refreshToday();
+		document.addEventListener('visibilitychange', onresume);
+		const timer = setInterval(refreshToday, 60_000);
+		return () => {
+			document.removeEventListener('visibilitychange', onresume);
+			clearInterval(timer);
+		};
 	});
 
-	const NAV_ITEMS = [
-		{ href: '/', label: 'Today', icon: 'checklist' },
+	const TABS: { href: string; label: string; icon: IconName }[] = [
+		{ href: '/', label: 'Today', icon: 'today' },
 		{ href: '/stacks', label: 'Stacks', icon: 'stacks' },
 		{ href: '/stats', label: 'Stats', icon: 'stats' },
-		{ href: '/achievements', label: 'Awards', icon: 'awards' },
+		{ href: '/room', label: 'Room', icon: 'room' }
 	];
 
-	let currentPath = $derived(page.url.pathname);
+	const path = $derived(page.url.pathname);
+	const isActive = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
 </script>
 
-<svelte:head>
-	<title>Stackr</title>
-</svelte:head>
+<Toast />
 
-<Toast bind:this={toastRef} />
-
-{#if !ready}
-	<div class="flex items-center justify-center min-h-screen">
-		<div class="text-center">
-			<div class="text-5xl mb-4 animate-pulse-slow">🏗️</div>
-			<div class="text-xl font-bold text-indigo-400">Stackr</div>
-			<div class="text-sm text-slate-500 mt-2">Loading...</div>
+{#if status === 'loading'}
+	<div class="grid min-h-dvh place-items-center" aria-busy="true">
+		<div class="flex flex-col items-center gap-3 opacity-0 [animation:fadein_0.3s_0.4s_forwards]">
+			<div class="grid size-16 place-items-center rounded-3xl bg-indigo-500/15 text-3xl">🧱</div>
+			<p class="text-sm text-slate-500">Loading your stacks…</p>
+		</div>
+	</div>
+{:else if status === 'error'}
+	<div class="grid min-h-dvh place-items-center px-8 text-center">
+		<div>
+			<div class="mb-4 text-5xl">😵</div>
+			<h1 class="text-xl font-bold text-white">Couldn’t open your data</h1>
+			<p class="mt-2 text-sm text-slate-400">
+				Stackr stores everything on this device. Private browsing or blocked site storage can prevent that.
+			</p>
+			<button class="btn-primary mt-6" onclick={() => location.reload()}>Try Again</button>
 		</div>
 	</div>
 {:else}
-	<div class="min-h-screen flex flex-col bg-slate-950">
-		<main class="flex-1 px-4 pb-24 pt-6 max-w-lg mx-auto w-full">
-			{#key page.url.pathname}
-				<div in:fly={{ y: 8, duration: 180, easing: quartOut }}>
-					{@render children()}
-				</div>
-			{/key}
-		</main>
-
-		<nav class="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-sm border-t border-slate-800 z-40">
-			<div class="max-w-lg mx-auto flex items-center justify-around px-4 py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-				{#each NAV_ITEMS as item}
-					<a
-						href={item.href}
-						class="flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-lg transition-colors {currentPath === item.href || (item.href !== '/' && currentPath.startsWith(item.href))
-							? 'text-indigo-400'
-							: 'text-slate-500 hover:text-slate-300'}"
-						aria-label={item.label}
-					>
-						{#if item.icon === 'checklist'}
-							<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-							</svg>
-						{:else if item.icon === 'stacks'}
-							<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-							</svg>
-						{:else if item.icon === 'stats'}
-							<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-							</svg>
-						{:else if item.icon === 'awards'}
-							<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v2m1-2h2m2-4v2m0-2h2M3 21l6-6m0 0l3 3m6-12v4m0 0h4" />
-							</svg>
-						{/if}
-						<span class="text-xs">{item.label}</span>
-					</a>
-				{/each}
+	<main class="mx-auto w-full max-w-lg px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
+		{#key path}
+			<div in:fade={{ duration: 160 }}>
+				{@render children()}
 			</div>
-		</nav>
-	</div>
+		{/key}
+	</main>
+
+	<nav
+		class="fixed inset-x-0 bottom-0 z-40 border-t border-white/5 bg-slate-950/85 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl"
+		aria-label="Main"
+	>
+		<div class="mx-auto flex max-w-lg items-stretch justify-around px-2">
+			{#each TABS as tab (tab.href)}
+				{@const active = isActive(tab.href)}
+				<a
+					href={tab.href}
+					onclick={() => !active && haptic(6)}
+					aria-current={active ? 'page' : undefined}
+					class="flex flex-1 flex-col items-center gap-0.5 pt-2 pb-1.5 text-[11px] font-medium transition-colors {active
+						? 'text-indigo-400'
+						: 'text-slate-500 active:text-slate-300'}"
+				>
+					<span
+						class="grid h-8 w-14 place-items-center rounded-full transition-colors duration-200 {active
+							? 'bg-indigo-500/15'
+							: ''}"
+					>
+						<Icon name={tab.icon} class="size-6" strokeWidth={active ? 2 : 1.6} />
+					</span>
+					{tab.label}
+				</a>
+			{/each}
+		</div>
+	</nav>
 {/if}
+
+<style>
+	@keyframes -global-fadein {
+		to {
+			opacity: 1;
+		}
+	}
+</style>

@@ -1,116 +1,111 @@
-// E2E tests for Stackr PWA
-// Tests run against the preview server (adapter-node) in local mode (no Supabase)
+// End-to-end tests against the production build (adapter-node preview).
+import { test, expect, type Page } from '@playwright/test';
 
-import { test, expect } from '@playwright/test';
+test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
-// Helper: wait for the app to hydrate (SSR is disabled)
-async function waitForApp(page: import('@playwright/test').Page) {
-	await page.goto('/');
-	// Wait for the app shell to render (client-side hydration)
-	await page.waitForSelector('nav', { timeout: 15000 });
+async function openApp(page: Page, path = '/') {
+	await page.goto(path);
+	await page.waitForSelector('nav[aria-label="Main"]', { timeout: 15000 });
 }
 
-test.describe('Stackr App', () => {
-	test('loads the app and shows empty state', async ({ page }) => {
-		await waitForApp(page);
-		await expect(page.getByText('No stacks yet')).toBeVisible({ timeout: 10000 });
-		await expect(page.getByRole('button', { name: 'Create Your First Stack' })).toBeVisible();
-	});
+async function createStack(page: Page, name: string, trigger: string, firstHabit?: string) {
+	await page.getByRole('button', { name: /New Stack|Build my own stack/ }).first().click();
+	const sheet = page.getByRole('dialog', { name: 'New Stack' });
+	await sheet.getByLabel('Name').fill(name);
+	await sheet.getByLabel(/Trigger/).fill(trigger);
+	if (firstHabit) await sheet.getByLabel(/First habit/).fill(firstHabit);
+	await sheet.getByRole('button', { name: 'Create Stack' }).click();
+	await expect(sheet).toBeHidden();
+}
 
-	test('can create a new stack', async ({ page }) => {
-		await waitForApp(page);
+test('first run shows onboarding and starter templates', async ({ page }) => {
+	await openApp(page);
+	await expect(page.getByText('Stack tiny habits onto routines you already have')).toBeVisible();
+	await expect(page.getByRole('button', { name: /Morning Coffee/ })).toBeVisible();
+});
 
-		// Click create button
-		await page.getByRole('button', { name: 'Create Your First Stack' }).click();
+test('a template creates a stack with habits', async ({ page }) => {
+	await openApp(page);
+	await page.getByRole('button', { name: /Morning Coffee/ }).click();
+	await expect(page.getByRole('region', { name: 'Morning Coffee' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Drink a glass of water' })).toBeVisible();
+	await expect(page.getByText('0 of 3 habits done')).toBeVisible();
+});
 
-		// Fill in the modal
-		await expect(page.getByText('Create New Stack')).toBeVisible();
-		await page.locator('#new-stack-name').fill('Morning Routine');
-		await page.locator('#new-stack-trigger').fill('After I make coffee');
+test('create a custom stack, add a habit, check it off', async ({ page }) => {
+	await openApp(page);
+	await createStack(page, 'Evening', 'After I brush my teeth', 'Read 5 pages');
 
-		// Select a color (first one)
-		await page.getByRole('button', { name: /Select indigo color/ }).click();
+	const stack = page.getByRole('region', { name: 'Evening' });
+	await stack.getByRole('button', { name: 'Add habit' }).click();
+	const sheet = page.getByRole('dialog', { name: 'New Habit' });
+	await sheet.getByLabel('Habit').fill('Journal one line');
+	await sheet.getByRole('button', { name: 'Add Habit' }).click();
+	await expect(sheet).toBeHidden();
 
-		// Create the stack (exact match to avoid "Create Your First Stack")
-		await page.getByRole('button', { name: 'Create', exact: true }).click();
+	const habit = stack.getByRole('button', { name: 'Read 5 pages' });
+	await habit.click();
+	await expect(habit).toHaveAttribute('aria-pressed', 'true');
+	// +10 per habit, plus the first-check-in-of-the-day streak bonus
+	await expect(page.getByText(/^\+\d+ XP$/)).toBeVisible();
+	await expect(page.getByText('1 of 2 habits done')).toBeVisible();
 
-		// Modal should close and stack should appear
-		await expect(page.getByText('Morning Routine')).toBeVisible();
-		await expect(page.getByText('After I make coffee')).toBeVisible();
-	});
+	// unchecking takes it back
+	await habit.click();
+	await expect(habit).toHaveAttribute('aria-pressed', 'false');
+});
 
-	test('can add a habit to a stack', async ({ page }) => {
-		await waitForApp(page);
+test('completions persist across reloads', async ({ page }) => {
+	await openApp(page);
+	await page.getByRole('button', { name: /Wind Down/ }).click();
+	const habit = page.getByRole('button', { name: 'Read 5 pages' });
+	await habit.click();
+	await expect(habit).toHaveAttribute('aria-pressed', 'true');
+	await page.reload();
+	await page.waitForSelector('nav[aria-label="Main"]');
+	await expect(page.getByRole('button', { name: 'Read 5 pages' })).toHaveAttribute('aria-pressed', 'true');
+});
 
-		// Create a stack first
-		await page.getByRole('button', { name: 'Create Your First Stack' }).click();
-		await page.locator('#new-stack-name').fill('Evening Wind-Down');
-		await page.locator('#new-stack-trigger').fill('After I brush my teeth');
-		await page.getByRole('button', { name: 'Create', exact: true }).click();
+test('deleting a stack removes it and its habits for good', async ({ page }) => {
+	await openApp(page);
+	await page.getByRole('button', { name: /Desk Reset/ }).click();
+	await page.getByRole('button', { name: 'Clear my desk' }).click();
 
-		// Add a habit
-		await page.getByText('+ Add habit').click();
-		await page.locator('input[placeholder="New habit..."]').fill('Read for 20 minutes');
-		await page.getByRole('button', { name: 'Add', exact: true }).click();
+	await page.getByRole('link', { name: 'Stacks', exact: true }).click();
+	await page.getByRole('link', { name: /Desk Reset/ }).click();
+	await page.getByRole('button', { name: 'Edit' }).click();
+	await page.getByRole('button', { name: 'Delete Stack' }).click();
+	await page.getByRole('button', { name: 'Delete', exact: true }).click();
+	await expect(page).toHaveURL(/\/stacks$/);
 
-		// Habit should appear
-		await expect(page.getByText('Read for 20 minutes')).toBeVisible();
-	});
+	await page.reload();
+	await page.waitForSelector('nav[aria-label="Main"]');
+	await expect(page.getByText('Desk Reset')).toHaveCount(0);
+	await page.getByRole('link', { name: 'Stats', exact: true }).click();
+	await expect(page.getByText('Clear my desk')).toHaveCount(0);
+});
 
-	test('can toggle a habit completion', async ({ page }) => {
-		await waitForApp(page);
+test('tab bar reaches every screen', async ({ page }) => {
+	await openApp(page);
+	for (const [tab, url, heading] of [
+		['Stacks', /\/stacks$/, 'Stacks'],
+		['Stats', /\/stats$/, 'Stats'],
+		['Room', /\/room$/, 'Your Room'],
+		['Today', /\/$/, 'Today']
+	] as const) {
+		await page.getByRole('link', { name: tab, exact: true }).click();
+		await expect(page).toHaveURL(url);
+		await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
+	}
+});
 
-		// Create stack and habit
-		await page.getByRole('button', { name: 'Create Your First Stack' }).click();
-		await page.locator('#new-stack-name').fill('Test Stack');
-		await page.locator('#new-stack-trigger').fill('After trigger');
-		await page.getByRole('button', { name: 'Create', exact: true }).click();
+test('room shows furniture and badges, and old links redirect', async ({ page }) => {
+	await openApp(page, '/achievements');
+	await expect(page).toHaveURL(/\/room$/);
+	await expect(page.getByTestId('lofi-room-hero')).toBeVisible();
+	await expect(page.getByText('Next: Stage 2 · First Desk')).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Badges' })).toBeVisible();
 
-		await page.getByText('+ Add habit').click();
-		await page.locator('input[placeholder="New habit..."]').fill('Test habit');
-		await page.getByRole('button', { name: 'Add', exact: true }).click();
-
-		// Toggle the habit — click the habit row button
-		const habitRow = page.getByRole('button', { name: /Test habit/ });
-		await habitRow.click();
-
-		// Should show completed state (checkmark SVG)
-		await expect(page.locator('svg.text-white').first()).toBeVisible();
-	});
-
-	test('can navigate to Stacks page', async ({ page }) => {
-		await waitForApp(page);
-
-		// Navigate via nav link (not "No stacks yet" heading)
-		await page.getByRole('link', { name: 'Stacks' }).click();
-		await expect(page).toHaveURL(/\/stacks/);
-	});
-
-	test('can navigate to Stats page', async ({ page }) => {
-		await waitForApp(page);
-
-		await page.getByRole('link', { name: 'Stats' }).click();
-		await expect(page).toHaveURL(/\/stats/);
-	});
-
-	test('can navigate to Achievements page', async ({ page }) => {
-		await waitForApp(page);
-
-		await page.getByRole('link', { name: 'Awards' }).click();
-		await expect(page).toHaveURL(/\/achievements/);
-	});
-
-	test('nav bar is visible on all pages', async ({ page }) => {
-		await waitForApp(page);
-		await expect(page.locator('nav')).toBeVisible();
-
-		await page.getByRole('link', { name: 'Stacks' }).click();
-		await expect(page.locator('nav')).toBeVisible();
-
-		await page.getByRole('link', { name: 'Stats' }).click();
-		await expect(page.locator('nav')).toBeVisible();
-
-		await page.getByRole('link', { name: 'Awards' }).click();
-		await expect(page.locator('nav')).toBeVisible();
-	});
+	await page.getByRole('button', { name: /sleeping bag/i }).click();
+	await expect(page.getByRole('status')).toContainText('Sleeping bag');
 });

@@ -1,20 +1,14 @@
-// Service Worker for Stackr PWA
-// Build output: static/service-worker.js
-// This file is built separately by vite and placed in static/
+// Service worker for the Stackr PWA. Built separately (`npm run build:sw`)
+// into static/service-worker.js. Network-first for pages, cache-first for
+// static assets (Vite hashes their filenames).
 
 /// <reference lib="webworker" />
 
 declare const self: ServiceWorkerGlobalScope;
-declare const CACHE_NAME: string;
 
-const CACHE = 'stackr-v1';
+const CACHE = 'stackr-v2';
 
-const SHELL = [
-	'/',
-	'/stacks',
-	'/stats',
-	'/achievements',
-];
+const SHELL = ['/', '/stacks', '/stats', '/room'];
 
 self.addEventListener('install', (event) => {
 	event.waitUntil(

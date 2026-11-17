@@ -1,37 +1,29 @@
-// IndexedDB service for offline-first data storage
-// Uses idb library for clean async API
-// Local-only mode — no sync queue needed
+// IndexedDB storage — the app's only data store (offline-first, no server).
 
-import { openDB, type IDBPDatabase } from 'idb';
+import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { Stack, Habit, Completion, Achievement, Profile } from '$lib/types';
 
 const DB_NAME = 'stackr';
 const DB_VERSION = 4;
 
-/** Key/value settings persisted locally (e.g. garden theme). */
-export interface Setting {
-	key: string;
-	value: string | number | boolean;
-	updated_at: string;
+interface StackrDB extends DBSchema {
+	stacks: { key: string; value: Stack; indexes: { user_id: string; sort_order: number } };
+	habits: { key: string; value: Habit; indexes: { stack_id: string; user_id: string } };
+	completions: {
+		key: string;
+		value: Completion;
+		indexes: { habit_id: string; completed_at: string; user_id: string; habit_date: [string, string] };
+	};
+	achievements: { key: string; value: Achievement; indexes: { user_id: string } };
+	profile: { key: string; value: Profile };
 }
 
-export type GardenTheme = 'plant' | 'machine';
+const DATA_STORES = ['stacks', 'habits', 'completions', 'achievements', 'profile'] as const;
 
-interface StackrDB {
-	stacks: Stack;
-	habits: Habit;
-	completions: Completion;
-	achievements: Achievement;
-	profile: Profile;
-	settings: Setting;
-}
+let dbPromise: Promise<IDBPDatabase<StackrDB>> | null = null;
 
-let dbInstance: IDBPDatabase<StackrDB> | null = null;
-
-async function getDB(): Promise<IDBPDatabase<StackrDB>> {
-	if (dbInstance) return dbInstance;
-
-	dbInstance = await openDB<StackrDB>(DB_NAME, DB_VERSION, {
+function getDB(): Promise<IDBPDatabase<StackrDB>> {
+	dbPromise ??= openDB<StackrDB>(DB_NAME, DB_VERSION, {
 		upgrade(db, oldVersion, _newVersion, transaction) {
 			if (oldVersion < 1) {
 				const stackStore = db.createObjectStore('stacks', { keyPath: 'id' });
@@ -49,239 +41,163 @@ async function getDB(): Promise<IDBPDatabase<StackrDB>> {
 				completionStore.createIndex('habit_date', ['habit_id', 'completed_at'], { unique: true });
 
 				db.createObjectStore('profile', { keyPath: 'id' });
-
-				// Legacy sync queue store (kept for DB version compatibility)
-				if (!db.objectStoreNames.contains('syncQueue')) {
-					const syncStore = db.createObjectStore('syncQueue', { keyPath: 'id' });
-					syncStore.createIndex('table', 'table');
-				}
 			}
 
-			if (oldVersion < 2) {
-				if (!db.objectStoreNames.contains('achievements')) {
-					db.createObjectStore('achievements', { keyPath: 'id' });
-				}
+			if (oldVersion < 2 && !db.objectStoreNames.contains('achievements')) {
+				db.createObjectStore('achievements', { keyPath: 'id' });
 			}
 
-			// v3: add user_id index to achievements (was missing in v2)
-			if (oldVersion > 0 && oldVersion < 3 && transaction) {
+			// v3: user_id index on achievements (missing in v2)
+			if (oldVersion > 0 && oldVersion < 3) {
 				const store = transaction.objectStore('achievements');
-				if (!store.indexNames.contains('user_id')) {
-					store.createIndex('user_id', 'user_id');
-				}
+				if (!store.indexNames.contains('user_id')) store.createIndex('user_id', 'user_id');
 			}
 
-			// v4: settings key/value store (garden theme etc.)
-			if (oldVersion < 4) {
-				if (!db.objectStoreNames.contains('settings')) {
-					db.createObjectStore('settings', { keyPath: 'key' });
-				}
-			}
-		},
-	});
-
-	return dbInstance;
-}
-
-// Reset DB (for sign out / local reset)
-export async function resetDB(): Promise<void> {
-	dbInstance = null;
-	await deleteDB();
-}
-
-async function deleteDB(): Promise<void> {
-	try {
-		const dbs = await indexedDB.databases();
-		const exists = dbs.some(db => db.name === DB_NAME);
-		if (exists) {
-			await new Promise<void>((resolve, reject) => {
-				const request = indexedDB.deleteDatabase(DB_NAME);
-				request.onsuccess = () => resolve();
-				request.onerror = () => reject(request.error);
-			});
+			// v4 added a key/value `settings` store for a since-removed feature.
+			// It is never read; the version stays at 4 so existing installs open cleanly.
 		}
-	} catch {
-		// Fallback: try direct delete
-		indexedDB.deleteDatabase(DB_NAME);
-	}
+	});
+	return dbPromise;
 }
 
 // ============ MIGRATION ============
 
-// Migrate data from an old user ID (e.g. Supabase auth user) to the local user ID.
-// Called on first launch after removing auth — finds any orphaned data and re-keys it.
-export async function migrateFromOldUserId(newUserId: string): Promise<boolean> {
-	const database = await getDB();
-
-	// Check if new user already has data
-	const existingStacks = await database.getAllFromIndex('stacks', 'user_id', newUserId);
-	if (existingStacks.length > 0) return false; // Already has data, skip migration
-
-	// Find any existing profile (there should be at most one)
-	const allProfiles: Profile[] = await database.getAll('profile');
-	const oldProfile = allProfiles.find(p => p.id !== newUserId);
-
-	if (!oldProfile) {
-		// No existing data at all — fresh start
-		return false;
-	}
-
-	const oldUserId = oldProfile.id;
-
-	// Re-key profile
-	const newProfile: Profile = { ...oldProfile, id: newUserId };
-	await database.put('profile', newProfile);
-	await database.delete('profile', oldUserId);
-
-	// Migrate stacks
-	const oldStacks: Stack[] = await database.getAllFromIndex('stacks', 'user_id', oldUserId);
-	for (const stack of oldStacks) {
-		stack.user_id = newUserId;
-		await database.put('stacks', stack);
-	}
-
-	// Migrate habits
-	const oldHabits: Habit[] = await database.getAllFromIndex('habits', 'user_id', oldUserId);
-	for (const habit of oldHabits) {
-		habit.user_id = newUserId;
-		await database.put('habits', habit);
-	}
-
-	// Migrate completions
-	const oldCompletions: Completion[] = await database.getAllFromIndex('completions', 'user_id', oldUserId);
-	for (const completion of oldCompletions) {
-		completion.user_id = newUserId;
-		await database.put('completions', completion);
-	}
-
-	// Migrate achievements — use getAll() since user_id index may not exist yet on v2 DBs
-	const allAchievements: Achievement[] = await database.getAll('achievements');
-	const oldAchievements = allAchievements.filter(a => a.user_id === oldUserId);
-	for (const achievement of oldAchievements) {
-		achievement.user_id = newUserId;
-		await database.put('achievements', achievement);
-	}
-
-	return true;
-}
-
-// ============ STACK OPERATIONS ============
-
-export async function getAllStacks(userId: string): Promise<Stack[]> {
+/**
+ * Re-key data written under an older user id (the app once had accounts) to
+ * the current local id. Runs on launch; a no-op once the local id owns data.
+ */
+export async function migrateFromOldUserId(newUserId: string): Promise<void> {
 	const db = await getDB();
-	return db.getAllFromIndex('stacks', 'user_id', userId);
+	const profiles = await db.getAll('profile');
+	if (profiles.some((p) => p.id === newUserId)) return;
+	const old = profiles[0];
+	if (!old) return;
+
+	const tx = db.transaction(DATA_STORES, 'readwrite');
+	await tx.objectStore('profile').put({ ...old, id: newUserId });
+	await tx.objectStore('profile').delete(old.id);
+	const rekey = async <T extends { user_id: string }>(rows: T[], put: (row: T) => Promise<unknown>) => {
+		for (const row of rows) if (row.user_id === old.id) await put({ ...row, user_id: newUserId });
+	};
+	await rekey(await tx.objectStore('stacks').getAll(), (r) => tx.objectStore('stacks').put(r));
+	await rekey(await tx.objectStore('habits').getAll(), (r) => tx.objectStore('habits').put(r));
+	await rekey(await tx.objectStore('completions').getAll(), (r) => tx.objectStore('completions').put(r));
+	await rekey(await tx.objectStore('achievements').getAll(), (r) => tx.objectStore('achievements').put(r));
+	await tx.done;
 }
 
-export async function getStack(id: string): Promise<Stack | undefined> {
+// ============ READS ============
+
+export async function loadAll(userId: string) {
 	const db = await getDB();
-	return db.get('stacks', id);
+	const [stacks, habits, completions, achievements, profile] = await Promise.all([
+		db.getAllFromIndex('stacks', 'user_id', userId),
+		db.getAllFromIndex('habits', 'user_id', userId),
+		db.getAllFromIndex('completions', 'user_id', userId),
+		db.getAll('achievements'),
+		db.get('profile', userId)
+	]);
+	const habitIds = new Set(habits.map((h) => h.id));
+	const stackIds = new Set(stacks.map((s) => s.id));
+	return {
+		stacks,
+		// Older builds deleted stacks/habits without their children; ignore orphans.
+		habits: habits.filter((h) => stackIds.has(h.stack_id)),
+		completions: completions.filter((c) => habitIds.has(c.habit_id)),
+		achievements: achievements.filter((a) => a.user_id === userId),
+		profile
+	};
 }
+
+// ============ WRITES ============
 
 export async function saveStack(stack: Stack): Promise<void> {
-	const db = await getDB();
-	await db.put('stacks', stack);
+	await (await getDB()).put('stacks', stack);
 }
 
-export async function deleteStack(id: string): Promise<void> {
-	const db = await getDB();
-	await db.delete('stacks', id);
-}
-
-// ============ HABIT OPERATIONS ============
-
-export async function getHabitsByStack(stackId: string): Promise<Habit[]> {
-	const db = await getDB();
-	return db.getAllFromIndex('habits', 'stack_id', stackId);
-}
-
-export async function getHabit(id: string): Promise<Habit | undefined> {
-	const db = await getDB();
-	return db.get('habits', id);
+export async function saveStacks(stacks: Stack[]): Promise<void> {
+	const tx = (await getDB()).transaction('stacks', 'readwrite');
+	await Promise.all([...stacks.map((s) => tx.store.put(s)), tx.done]);
 }
 
 export async function saveHabit(habit: Habit): Promise<void> {
-	const db = await getDB();
-	await db.put('habits', habit);
+	await (await getDB()).put('habits', habit);
 }
 
-export async function getAllHabitsByUser(userId: string): Promise<Habit[]> {
-	const db = await getDB();
-	return db.getAllFromIndex('habits', 'user_id', userId);
+export async function saveHabits(habits: Habit[]): Promise<void> {
+	const tx = (await getDB()).transaction('habits', 'readwrite');
+	await Promise.all([...habits.map((h) => tx.store.put(h)), tx.done]);
 }
 
+/** Delete a stack together with its habits and their completions. */
+export async function deleteStack(id: string): Promise<void> {
+	const db = await getDB();
+	const tx = db.transaction(['stacks', 'habits', 'completions'], 'readwrite');
+	const completions = tx.objectStore('completions');
+	for (const habitId of await tx.objectStore('habits').index('stack_id').getAllKeys(id)) {
+		for (const key of await completions.index('habit_id').getAllKeys(habitId)) await completions.delete(key);
+		await tx.objectStore('habits').delete(habitId);
+	}
+	await tx.objectStore('stacks').delete(id);
+	await tx.done;
+}
+
+/** Delete a habit together with its completions. */
 export async function deleteHabit(id: string): Promise<void> {
 	const db = await getDB();
-	await db.delete('habits', id);
-}
-
-// ============ COMPLETION OPERATIONS ============
-
-export async function getCompletionsByHabit(habitId: string): Promise<Completion[]> {
-	const db = await getDB();
-	return db.getAllFromIndex('completions', 'habit_id', habitId);
-}
-
-export async function getCompletionsByDate(userId: string, date: string): Promise<Completion[]> {
-	const db = await getDB();
-	return db.getAllFromIndex('completions', 'completed_at', date);
-}
-
-export async function getCompletionsByUser(userId: string): Promise<Completion[]> {
-	const db = await getDB();
-	return db.getAllFromIndex('completions', 'user_id', userId);
+	const tx = db.transaction(['habits', 'completions'], 'readwrite');
+	const completions = tx.objectStore('completions');
+	for (const key of await completions.index('habit_id').getAllKeys(id)) await completions.delete(key);
+	await tx.objectStore('habits').delete(id);
+	await tx.done;
 }
 
 export async function saveCompletion(completion: Completion): Promise<void> {
-	const db = await getDB();
-	await db.put('completions', completion);
+	await (await getDB()).put('completions', completion);
 }
 
 export async function deleteCompletion(id: string): Promise<void> {
-	const db = await getDB();
-	await db.delete('completions', id);
-}
-
-export async function getCompletionForHabitDate(habitId: string, date: string): Promise<Completion | undefined> {
-	const db = await getDB();
-	return db.getFromIndex('completions', 'habit_date', [habitId, date]);
-}
-
-// ============ PROFILE OPERATIONS ============
-
-export async function getProfile(userId: string): Promise<Profile | undefined> {
-	const db = await getDB();
-	return db.get('profile', userId);
+	await (await getDB()).delete('completions', id);
 }
 
 export async function saveProfile(profile: Profile): Promise<void> {
-	const db = await getDB();
-	await db.put('profile', profile);
-}
-
-// ============ ACHIEVEMENT OPERATIONS ============
-
-export async function getAchievementsByUser(userId: string): Promise<Achievement[]> {
-	const db = await getDB();
-	// Use getAll + filter since user_id index may not exist on v2 DBs
-	const all: Achievement[] = await db.getAll('achievements');
-	return all.filter(a => a.user_id === userId);
+	await (await getDB()).put('profile', profile);
 }
 
 export async function saveAchievement(achievement: Achievement): Promise<void> {
-	const db = await getDB();
-	await db.put('achievements', achievement);
+	await (await getDB()).put('achievements', achievement);
 }
 
-// ============ SETTINGS OPERATIONS ============
+// ============ BACKUP ============
 
-export async function getSetting<T extends string | number | boolean>(key: string): Promise<T | undefined> {
-	const db = await getDB();
-	const setting = await db.get('settings', key);
-	return setting?.value as T | undefined;
+export interface Backup {
+	app: 'stackr';
+	version: 1;
+	exported_at: string;
+	stacks: Stack[];
+	habits: Habit[];
+	completions: Completion[];
+	achievements: Achievement[];
+	profile: Profile | null;
 }
 
-export async function saveSetting(key: string, value: string | number | boolean): Promise<void> {
+/** Replace every record with the backup's contents, re-keyed to `userId`. */
+export async function replaceAll(userId: string, backup: Backup): Promise<void> {
 	const db = await getDB();
-	const setting: Setting = { key, value, updated_at: new Date().toISOString() };
-	await db.put('settings', setting);
+	const tx = db.transaction(DATA_STORES, 'readwrite');
+	await Promise.all(DATA_STORES.map((name) => tx.objectStore(name).clear()));
+	const own = <T extends { user_id: string }>(rows: T[]) => rows.map((r) => ({ ...r, user_id: userId }));
+	for (const s of own(backup.stacks)) await tx.objectStore('stacks').put(s);
+	for (const h of own(backup.habits)) await tx.objectStore('habits').put(h);
+	for (const c of own(backup.completions)) await tx.objectStore('completions').put(c);
+	for (const a of own(backup.achievements)) await tx.objectStore('achievements').put(a);
+	if (backup.profile) await tx.objectStore('profile').put({ ...backup.profile, id: userId });
+	await tx.done;
+}
+
+/** Wipe all app data. */
+export async function clearAll(): Promise<void> {
+	const db = await getDB();
+	const tx = db.transaction(DATA_STORES, 'readwrite');
+	await Promise.all([...DATA_STORES.map((name) => tx.objectStore(name).clear()), tx.done]);
 }

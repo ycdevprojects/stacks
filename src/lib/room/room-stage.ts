@@ -16,6 +16,16 @@ export const STAGE_NAMES: readonly string[] = [
 	'Sanctuary'
 ];
 
+/** What each stage adds to the room (index = stage - 1). */
+export const STAGE_UNLOCKS: readonly string[] = [
+	'A sleeping bag, a storage crate and a candle',
+	'A desk and a chair',
+	'A plant, a sprout on the desk and a poster',
+	'A proper bed, a nightstand and a big rug',
+	'A bookshelf, another plant and a pet pig',
+	'A media shelf, a speaker and string lights'
+];
+
 /**
  * Map cumulative XP to a room stage (1..6). Negative or missing XP clamps to 1.
  * Boundaries: 149 -> 1, 150 -> 2, 399 -> 2, 400 -> 3, 799 -> 3,
@@ -60,7 +70,7 @@ export type RoomPeriod = 'day' | 'night';
 export interface RoomMood {
 	/** Daytime brightens the room; night adds lamp glow, rain and film grain. */
 	period: RoomPeriod;
-	/** True when there were no habit completions in the last 3 days. */
+	/** True when the last habit completion was 3+ days ago. */
 	sleepy: boolean;
 }
 
@@ -70,11 +80,12 @@ export function isNightHour(hour: number): boolean {
 }
 
 /**
- * Sleepy = no habit completions in the last 3 days (or never completed one).
+ * Sleepy = the last habit completion was 3+ days ago. A brand-new room (no
+ * completions yet) is awake so first impressions aren't gloomy.
  * `lastCompletionDate` is a YYYY-MM-DD string or null; local dates only.
  */
 export function isSleepyStreak(lastCompletionDate: string | null, todayStr: string): boolean {
-	if (!lastCompletionDate) return true;
+	if (!lastCompletionDate) return false;
 	const a = new Date(lastCompletionDate + 'T12:00:00');
 	const b = new Date(todayStr + 'T12:00:00');
 	if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return true;

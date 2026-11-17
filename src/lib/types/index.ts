@@ -4,9 +4,12 @@ export interface Stack {
 	id: string;
 	user_id: string;
 	name: string;
-	trigger: string; // "after I make coffee"
-	color: string; // tailwind color class or hex
-	icon: string; // emoji
+	/** The existing routine the habits hang off — "After I make coffee". */
+	trigger: string;
+	/** Key into STACK_COLORS. */
+	color: string;
+	/** Emoji. */
+	icon: string;
 	sort_order: number;
 	created_at: string;
 	updated_at: string;
@@ -27,12 +30,14 @@ export interface Completion {
 	id: string;
 	habit_id: string;
 	user_id: string;
-	completed_at: string; // ISO date string YYYY-MM-DD
+	/** Local calendar date, YYYY-MM-DD. */
+	completed_at: string;
 	created_at: string;
 }
 
 export interface Profile {
-	id: string; // same as auth user id
+	/** The local user id. */
+	id: string;
 	xp: number;
 	level: number;
 	streak_days: number;
@@ -57,40 +62,3 @@ export interface BadgeDefinition {
 	icon: string;
 	category: 'streak' | 'completion' | 'level' | 'stack' | 'special';
 }
-
-export interface StackWithHabits extends Stack {
-	habits: Habit[];
-}
-
-export interface HabitWithCompletions extends Habit {
-	completions: Completion[];
-	streak: number;
-}
-
-export interface StackChecklist extends StackWithHabits {
-	habits: HabitWithCompletions[];
-	completedCount: number;
-	totalCount: number;
-	allComplete: boolean;
-}
-
-export interface HeatmapData {
-	date: string;
-	count: number;
-	level: 0 | 1 | 2 | 3 | 4; // intensity level for color
-}
-
-// XP & Level types
-export interface XPGain {
-	base: number;
-	streakBonus: number;
-	stackBonus: number;
-	total: number;
-}
-
-export interface LevelUp {
-	newLevel: number;
-	xpGained: number;
-	previousLevel: number;
-}
-

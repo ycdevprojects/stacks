@@ -1,229 +1,121 @@
 # Stackr
 
-> Micro-habit tracker built on habit stacking — define triggers, attach tiny habits, stack your way to better routines.
+> Tiny habits, stacked on routines you already have — and a cozy pixel room that fills up as you go.
 
-## What Is It?
+<p>
+  <img src="docs/screenshots/today-390x844.png" width="240" alt="Today screen" />
+  <img src="docs/screenshots/room-stage4-night-390x844.png" width="240" alt="Room at night" />
+  <img src="docs/screenshots/stats-390x844.png" width="240" alt="Stats screen" />
+</p>
 
-Stackr is a mobile-first PWA that uses the science of **habit stacking**: instead of building habits by time ("I'll meditate at 7 AM"), you attach them to triggers you already do ("After I make coffee, I'll meditate for 2 minutes").
+## What is it?
 
-### Core Concept
+Stackr is an installable, offline-first habit tracker built on **habit stacking**: instead of
+scheduling a habit for a time ("meditate at 7 AM"), you attach it to something you already do
+("after I pour my coffee, I'll stretch for two minutes").
 
-A **Stack** has a trigger ("After I make coffee") and a set of micro-habits attached to it. You check them off throughout the day. The app tracks streaks, awards XP, and shows your progress.
+A **stack** is a trigger plus a few tiny habits. Check them off each day to earn XP, keep streaks
+alive, unlock badges, and furnish your room.
 
 ## Features
 
-- **Habit Stacks** — Create stacks with custom triggers, colors, and icons
-- **Daily Checklist** — 2-tap logging, organized by stack
-- **Streak Tracking** — Per-habit streaks with fire indicators
-- **Last 7 Days** — Bar chart showing daily completion activity
-- **XP & Levels** — Earn XP for every completion, bonus for full stacks and streaks
-- **Rewards Room** — A cozy lofi-style pixel room that furnishes itself as you earn XP
-- **Offline-First** — All data stored locally in IndexedDB, works without internet
-- **PWA** — Install on iOS/Android homescreen
+- **Today** — a week strip with per-day progress rings, a daily summary, one-tap check-offs with
+  haptics, and backfill for the past 6 days.
+- **Stacks** — create from a template or from scratch; edit, reorder and delete stacks and habits
+  from bottom sheets. Each stack shows a 30-day completion rate and per-habit week dots.
+- **Stats** — level and XP, current/best streak, a weekly bar chart, a 12-week heatmap and
+  per-habit completion rates.
+- **Room** — a lofi pixel-art room that gains furniture across 6 stages. Tap any piece to see what
+  it is; the next stage's pieces show as silhouettes. Day/night lighting, rain at night, and a
+  sleepy mood after 3 idle days.
+- **Badges** — 20 badges for streaks, totals, levels, stacks and time of day, with progress.
+- **Backups** — export/restore a JSON backup and erase all data (Stats → ⚙︎).
+- **PWA** — installs to the home screen, works offline, respects safe areas and reduced motion.
 
-## Tech Stack
+## Getting started
 
-- **Frontend:** SvelteKit 5 (runes mode), Tailwind CSS 4
-- **Storage:** IndexedDB (offline-first via `idb`)
-- **Testing:** Vitest
-- **Deploy:** Vercel (or any SvelteKit adapter)
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 20+
-- npm 10+
-
-### Install
+Requires Node.js 20+.
 
 ```bash
-git clone https://github.com/youngadults/stackr.git
-cd stackr
+git clone https://github.com/ycdevprojects/stacks.git
+cd stacks
 npm install
+npm run dev
 ```
 
-### Development
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Dev server (the service worker is only registered in production builds) |
+| `npm test` | Unit tests (Vitest) |
+| `npm run test:e2e` | End-to-end tests (Playwright, against an adapter-node production build) |
+| `npm run check` | Type checking (svelte-check) |
+| `npm run build` | Production build (service worker + app, Vercel adapter) |
 
-```bash
-npm run dev        # Start dev server
-npm run test       # Run tests
-npm run check      # Type checking
-npm run build      # Production build
-```
+**Deploy:** import the repo in [Vercel](https://vercel.com). For another host, build with
+`ADAPTER=node npm run build` and run `node build`.
 
-### Deploy to Vercel
+## How it works
 
-1. Push to GitHub
-2. Import in [Vercel](https://vercel.com)
-3. Deploy
+### Data
 
-For other platforms, install the appropriate SvelteKit adapter (e.g., `@sveltejs/adapter-node` for Node.js).
+Everything lives in **IndexedDB** on the device — no server, no account. A local user id is
+created on first launch (`localStorage`). Deleting a stack or habit also deletes its history.
+Because data never leaves the device, the Settings sheet offers JSON backup and restore.
 
-## Project Structure
+### XP and levels
+
+- **+10 XP** per habit checked off
+- **+25 XP** when a check-off completes its stack for that day
+- **+5 XP per streak day** (max +50) on the first check-off of the day
+
+Unchecking reverses exactly what checking awarded. Level N needs `25 × N × (N+1)` total XP
+(level 1 = 50, level 5 = 750, level 10 = 2,750).
+
+A **streak** is consecutive days with at least one check-off; it stays alive through today if you
+logged yesterday.
+
+### Room stages
+
+The room stage comes from total XP only (`src/lib/room/room-stage.ts`), so it can drop back if
+check-offs are undone.
+
+| Stage | Name | XP | Adds |
+| --- | --- | --- | --- |
+| 1 | Floor Days | 0 | A sleeping bag, a storage crate and a candle |
+| 2 | First Desk | 150 | A desk and a chair |
+| 3 | Green Corner | 400 | A plant, a sprout on the desk and a poster |
+| 4 | Proper Pad | 800 | A proper bed, a nightstand and a big rug (the sleeping bag goes) |
+| 5 | Lived In | 1,400 | A bookshelf, another plant and a pet pig |
+| 6 | Sanctuary | 2,200 | A media shelf, a speaker and string lights |
+
+The room is built from three modules:
+
+- `catalog.ts` — one entry per object kind: sprite, native pixel size, footprint width, zone and
+  stacking rules. Rendered height always follows the sprite's aspect ratio.
+- `layout.ts` — the scripted room: kind + tile position + stage window per piece.
+- `placement.ts` — the grid rules engine (bounds, zones, stacking, collisions). The layout tests
+  run the scripted room through it, so a bad position fails CI.
+
+Sprites are CC0; see `src/lib/assets/room/CREDITS.md`. Composite sprites (rug, bookshelf, bed,
+sleeping bag) are rebuilt with `python3 scripts/compose-room-sprites.py` (needs Pillow).
+
+## Project structure
 
 ```
 src/
 ├── lib/
-│   ├── assets/room/           # CC0 16px room tiles + CREDITS.md
-│   ├── room/
-│   │   ├── layout.ts          # Room furniture layout map (stage-gated)
-│   │   └── room-stage.ts      # XP → stage, day/night + sleepy mood
-│   ├── components/
-│   │   ├── DateNav.svelte      # Date navigation
-│   │   ├── NewStackModal.svelte # Stack creation bottom sheet
-│   │   ├── LofiRoom.svelte    # Rewards lofi-room hero (pixel art)
-│   │   └── Toast.svelte        # Toast notifications
-│   ├── services/
-│   │   ├── db.ts               # IndexedDB offline storage (incl. settings store)
-│   │   └── pwa.ts              # Service worker registration
-│   ├── stores/
-│   │   ├── app.svelte.ts       # Svelte 5 runes-based state (CRUD)
-│   │   ├── profile.ts          # Profile, XP, achievement logic
-│   │   └── toast.ts            # Toast notification state
-│   ├── types/
-│   │   └── index.ts            # TypeScript type definitions
-│   └── utils/
-│       ├── badges.ts           # Achievement definitions & checks
-│       ├── gamification.ts     # XP, levels, streaks
-│       └── helpers.ts          # Date, color, ID utilities
-├── routes/
-│   ├── +layout.svelte          # App shell, bottom nav
-│   ├── +page.svelte            # Today view (checklist)
-│   ├── stacks/
-│   │   ├── +page.svelte        # Stack management
-│   │   └── [id]/+page.svelte  # Individual stack detail
-│   ├── stats/+page.svelte      # Statistics
-│   └── achievements/+page.svelte # Rewards lofi-room hero + stage progress
-├── app.css                     # Global styles + Tailwind
-└── app.html                    # HTML shell
+│   ├── assets/room/        CC0 pixel sprites + CREDITS.md
+│   ├── components/         Sheet, PageHeader, WeekStrip, ProgressRing, LofiRoom, Toast, …
+│   ├── room/               catalog, layout, placement engine, stage + mood math
+│   ├── services/           db.ts (IndexedDB), pwa.ts (service worker registration)
+│   ├── stores/             app.svelte.ts (state + actions), profile.ts (XP/badges), toast
+│   ├── types/              data model
+│   └── utils/              gamification, badges, templates, feedback, helpers
+├── routes/                 / (Today), /stacks, /stacks/[id], /stats, /room
+└── sw.ts                   service worker (built to static/service-worker.js)
 ```
 
-## Gamification Math
-
-### XP
-- 10 XP per habit completed
-- +25 XP bonus for completing a full stack
-- +5 XP per streak day (capped at +50)
-
-### Levels
-- Level N requires `25 × N × (N+1)` total XP
-- Level 1 = 50 XP, Level 5 = 750 XP, Level 10 = 2,750 XP
-
-### Badges (data model)
-20 achievement keys across 5 categories still unlock silently from the same
-XP/streak data and are stored in IndexedDB:
-- **Streaks:** 3, 7, 14, 30, 100 day streaks
-- **Completions:** 1, 10, 50, 100, 500, 1000 habits
-- **Stacks:** First stack, 5 stacks, full stack completion
-- **Levels:** 5, 10, 25, 50
-- **Special:** Night owl, early bird
-
-## Rewards Room & Progression
-
-The achievements page renders one lofi-style cozy room from CC0 sprites
-(attribution in `src/lib/assets/room/CREDITS.md`; the wall, baseboard and
-floor shell tiles render as CSS backgrounds — everything else is placed
-sprites, one sprite per object). The 6x5 rug and the 3-tile bookshelf strip
-are composed multi-tile sprites, rebuilt by
-`scripts/compose-room-sprites.py`, not stacks of tile crops.
-
-The room is driven by three domain modules:
-
-- `src/lib/room/catalog.ts` — item-kind registry: sprite, native pixel size,
-  footprint width (height derives from the sprite aspect), placement zone
-  (`wall` / `floor` / `on-surface`), category, and stack rules. Swapping a
-  sprite or resizing an object is a one-line change here, and it propagates
-to every placement of that kind.
-- `src/lib/room/layout.ts` — `ROOM_PLACEMENTS`, the scripted default room:
-  a kind id + tile position + stage reveal window per placement.
-- `src/lib/room/placement.ts` — the grid placement engine: footprint rects,
-  integer cell coverage, zone bands, collision (stage-aware windows;
-  walkable rug sits under furniture) and `canPlace()`.
-
-This is the groundwork for the planned **unlock & place** feature: a player
-room adds unlocked kinds as placements (`{ id, kindId, x, y, source: 'user' }`)
-whenever `canPlace()` clears the spot — user placements already skip the
-stage gate in the renderer, and the same engine validates them.
-
-Furniture reveals are gated by **cumulative profile XP**, independent of the
-level curve above. The stage is derived only from XP
-(`stageFromXp` in `src/lib/room/room-stage.ts`), and it always follows
-current XP: completing habits never lowers XP, but XP is deducted when
-completions are un-done (`calculateUncompletionXP` in
-`src/lib/stores/profile.ts`), so the stage can regress after big
-un-completions. The bar under the room shows the percentage toward the next
-stage reveal (`stageProgress`) — it sits at 100% once the final stage is
-reached.
-
-### Room stages
-
-| Stage | Name | Unlocks at (cumulative profile XP) |
-| --- | --- | --- |
-| 1 | Floor Days | 0 |
-| 2 | First Desk | 150 |
-| 3 | Green Corner | 400 |
-| 4 | Proper Pad | 800 |
-| 5 | Lived In | 1,400 |
-| 6 | Sanctuary | 2,200 |
-
-### What appears at each stage
-
-- **Stage 1 — Floor Days:** bare walls and floor with a night window, a folded
-  blanket and pillow, a rolled-up sleeping mat, a wooden storage crate and a
-  lit candelabra.
-- **Stage 2 — First Desk:** a small wooden desk with a tucked-in chair.
-- **Stage 3 — Green Corner:** a potted sprout on the desk and a framed poster
-  on the wall.
-- **Stage 4 — Proper Pad:** a proper bed (replaces the floor blanket and
-  bedroll) and a 6×5 tiled carpet.
-- **Stage 5 — Lived In:** a three-section bookshelf and a pet pig napping on
-  the rug.
-- **Stage 6 — Sanctuary:** a media shelf with a speaker, plus string lights
-  along the wall.
-
-### Moods
-
-The room's mood is `deriveRoomMood(hour, lastCompletionDate, today)` in
-`src/lib/room/room-stage.ts`, rendered in `LofiRoom.svelte`:
-
-- **Night (19:00–06:00 local):** warm lamp glow around the candelabra, rain
-  streaks in the window and a film-grain overlay. **Day:** bright with a soft
-  warm tint.
-- **Sleepy:** when no habit was completed in the last 3 days (or ever), the
-  lamp glow dims and a sleepy vignette settles over the room. Sleepy is
-  cosmetic only — the sleepy mood itself never regresses the stage (only XP
-  changes can, see above).
-
-Screenshots: before/after hero renders at mobile (390×844) and desktop
-(1280×900) sizes live in `docs/screenshots/`, along with stage-4 night
-renders showing the finished 6×5 carpet.
-
-## Offline-First Architecture
-
-Stackr uses IndexedDB as the sole data store. All data lives in your browser — no server, no account, no sync. The app works fully offline from the moment you open it.
-
-A local user ID is generated on first launch and stored in localStorage. All IndexedDB records are keyed to this ID, so data persists across sessions.
-
-## PWA Setup
-
-The app includes a web manifest at `static/manifest.webmanifest` and icons at `static/icon-192.png` and `static/icon-512.png`.
-
-The service worker source is at `src/sw.ts`. It's built separately via:
-
-```bash
-npm run build:sw
-```
-
-This outputs `static/service-worker.js`. The full build (`npm run build`) runs this automatically.
-
-The service worker uses a network-first strategy for navigation and cache-first for static assets, with IndexedDB as the data layer for offline operation.
-
-## Security
-
-- No secrets in client code
-- Input validation on all forms
-- `.env.example` documents required variables (none required — app is fully local)
+`scripts/screenshot-docs.mjs` regenerates the screenshots above.
 
 ## License
 

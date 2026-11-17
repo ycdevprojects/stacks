@@ -82,8 +82,8 @@ describe('isNightHour', () => {
 });
 
 describe('isSleepyStreak', () => {
-	it('is sleepy with no completions at all', () => {
-		expect(isSleepyStreak(null, '2026-10-08')).toBe(true);
+	it('is not sleepy for a brand-new room with no completions yet', () => {
+		expect(isSleepyStreak(null, '2026-10-08')).toBe(false);
 	});
 
 	it('is not sleepy when the last completion was today, yesterday or 2 days ago', () => {
@@ -121,7 +121,7 @@ describe('deriveRoomMood', () => {
 		expect(deriveRoomMood(22, '2026-10-05', '2026-10-08')).toEqual({ period: 'night', sleepy: true });
 	});
 
-	it('a fresh profile with no completions is sleepy', () => {
-		expect(deriveRoomMood(12, null, '2026-10-08')).toEqual({ period: 'day', sleepy: true });
+	it('a fresh profile with no completions is awake', () => {
+		expect(deriveRoomMood(12, null, '2026-10-08')).toEqual({ period: 'day', sleepy: false });
 	});
 });

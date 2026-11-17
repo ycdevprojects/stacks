@@ -54,15 +54,18 @@ Credit (Kenney or www.kenney.nl) would be nice but is not mandatory.
 
 ## Composed sprites
 
-`rug.png` (96x80, a 6x5-tile carpet), `bookshelf.png` (48x16, a 3-tile
-shelf strip) and `bed.png` (16x32: `bed-half-head.png` (row 6) stacked
-above `bed-half-body.png` (row 7) — headboard/pillow on top, blanket
-running to the foot's fold edge) are composed in-repo from the crops listed above by
-`scripts/compose-room-sprites.py`; the piece crops stay in this directory
-as the composition source and provenance. The bed was first stitched
-inverted (foot above the pillow half), then re-stitched; after user review
-(2026-10-08) the row-5 flat sheet tile read as a detached box under the
-head and was replaced by the row-7 blanket body tile.
+These are built in-repo from the crops listed above by
+`scripts/compose-room-sprites.py`; the piece crops stay in this directory as
+the composition source and provenance.
+
+- `rug.png` (96x80): a 6x5-tile carpet from the nine rug pieces.
+- `bookshelf.png` (48x16): the three bookshelf tiles side by side.
+- `bed.png` (15x25): all of `bed-half-head.png` (row 6) plus only the
+  blanket and footer rows of `bed-half-body.png` (row 7). Both tiles repeat
+  the headboard, so pasting them whole read as two stacked beds.
+- `sleeping-bag.png` (16x11): the bag half of `floorbed.png`.
+- `nightstand.png`: recoloured in place — the slice had picked up the
+  neighbouring tile's white frame, which is now wood-toned.
 
 ## Ninja Adventure asset pack (pet sprite)
 

@@ -1,208 +1,100 @@
 <script lang="ts">
-	import { getAppState, removeStack, updateStack, reorderStacks } from '$lib/stores/app.svelte';
-	import { STACK_COLORS, STACK_ICONS, colorClasses, colorBg } from '$lib/utils/helpers';
-	import { showToast } from '$lib/stores/toast';
+	import { flip } from 'svelte/animate';
+	import { getAppState, habitsOf, moveStack } from '$lib/stores/app.svelte';
+	import { theme, plural, haptic } from '$lib/utils/helpers';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import StackSheet from '$lib/components/StackSheet.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 
-	const appState = getAppState();
+	const app = getAppState();
 
-	let editingStackId = $state<string | null>(null);
-	let editName = $state('');
-	let editTrigger = $state('');
-	let editColor = $state('indigo');
-	let editIcon = $state('☕');
-	let showDeleteConfirm = $state<string | null>(null);
-	let reorderMode = $state(false);
+	let reorder = $state(false);
+	let showNewStack = $state(false);
 
-	function startEdit(id: string) {
-		const stack = appState.stacks.find(s => s.id === id);
-		if (!stack) return;
-		editingStackId = id;
-		editName = stack.name;
-		editTrigger = stack.trigger;
-		editColor = stack.color;
-		editIcon = stack.icon;
-	}
-
-	async function saveEdit() {
-		if (!editingStackId) return;
-		const stack = appState.stacks.find(s => s.id === editingStackId);
-		if (!stack) return;
-		await updateStack({ ...stack, name: editName.trim(), trigger: editTrigger.trim(), color: editColor, icon: editIcon });
-		editingStackId = null;
-		showToast('success', 'Stack updated', undefined, '✏️');
-	}
-
-	async function handleDelete(id: string) {
-		await removeStack(id);
-		showDeleteConfirm = null;
-		editingStackId = null;
-		showToast('info', 'Stack deleted', undefined, '🗑️');
-	}
-
-	async function moveStack(fromIndex: number, toIndex: number) {
-		if (toIndex < 0 || toIndex >= appState.stacks.length) return;
-		const ids = [...appState.stacks.map(s => s.id)];
-		const [moved] = ids.splice(fromIndex, 1);
-		ids.splice(toIndex, 0, moved);
-		await reorderStacks(ids);
+	function move(id: string, delta: -1 | 1) {
+		haptic(6);
+		moveStack(id, delta);
 	}
 </script>
 
-<div>
-	<div class="flex items-center justify-between mb-6">
-		<h1 class="text-2xl font-bold text-white">Stacks</h1>
-		<div class="flex items-center gap-2">
-			{#if appState.stacks.length > 1}
-				<button
-					onclick={() => reorderMode = !reorderMode}
-					class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors {reorderMode ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}"
-				>
-					{reorderMode ? 'Done' : 'Reorder'}
-				</button>
-			{/if}
-			<a href="/" class="text-indigo-400 hover:text-indigo-300 text-sm">← Today</a>
-		</div>
+<svelte:head><title>Stacks · Stackr</title></svelte:head>
+
+<PageHeader title="Stacks">
+	{#snippet actions()}
+		{#if app.stacks.length > 1}
+			<button
+				type="button"
+				onclick={() => (reorder = !reorder)}
+				class="rounded-full px-3 py-1.5 text-[15px] font-medium active:opacity-60 {reorder ? 'bg-indigo-500 text-white' : 'text-indigo-400'}"
+			>
+				{reorder ? 'Done' : 'Reorder'}
+			</button>
+		{/if}
+		{#if !reorder}
+			<button
+				type="button"
+				onclick={() => (showNewStack = true)}
+				class="grid size-9 place-items-center rounded-full bg-indigo-500 text-white active:opacity-70"
+				aria-label="New stack"
+			>
+				<Icon name="plus" class="size-5" strokeWidth={2.5} />
+			</button>
+		{/if}
+	{/snippet}
+</PageHeader>
+
+{#if app.stacks.length === 0}
+	<div class="flex flex-col items-center px-6 py-16 text-center">
+		<div class="mb-4 grid size-16 place-items-center rounded-3xl bg-indigo-500/15 text-3xl">🧱</div>
+		<h2 class="text-lg font-semibold text-white">No stacks yet</h2>
+		<p class="mt-1 text-[15px] text-slate-400">A stack is a routine you already do, with a few tiny habits attached.</p>
+		<button type="button" class="btn-primary mt-6" onclick={() => (showNewStack = true)}>Create a Stack</button>
 	</div>
+{:else}
+	<ul class="card divide-y divide-white/5 overflow-hidden">
+		{#each app.stacks as stack, i (stack.id)}
+			{@const count = habitsOf(stack.id).length}
+			<li animate:flip={{ duration: 220 }} class="bg-slate-900">
+				{#if reorder}
+					<div class="flex items-center gap-3 px-4 py-3">
+						<span class="grid size-11 shrink-0 place-items-center rounded-xl text-xl {theme(stack.color).soft}">{stack.icon}</span>
+						<span class="min-w-0 flex-1 truncate font-semibold text-white">{stack.name}</span>
+						<button
+							type="button"
+							class="grid size-10 place-items-center rounded-full bg-slate-800 text-slate-300 active:bg-slate-700 disabled:opacity-30"
+							disabled={i === 0}
+							onclick={() => move(stack.id, -1)}
+							aria-label="Move {stack.name} up"
+						>
+							<Icon name="chevron-up" class="size-5" strokeWidth={2.25} />
+						</button>
+						<button
+							type="button"
+							class="grid size-10 place-items-center rounded-full bg-slate-800 text-slate-300 active:bg-slate-700 disabled:opacity-30"
+							disabled={i === app.stacks.length - 1}
+							onclick={() => move(stack.id, 1)}
+							aria-label="Move {stack.name} down"
+						>
+							<Icon name="chevron-down" class="size-5" strokeWidth={2.25} />
+						</button>
+					</div>
+				{:else}
+					<a href="/stacks/{stack.id}" class="flex items-center gap-3 px-4 py-3 active:bg-white/5">
+						<span class="grid size-11 shrink-0 place-items-center rounded-xl text-xl {theme(stack.color).soft}">{stack.icon}</span>
+						<span class="min-w-0 flex-1">
+							<span class="block truncate font-semibold text-white">{stack.name}</span>
+							<span class="block truncate text-[13px] text-slate-400">{stack.trigger}</span>
+						</span>
+						<span class="shrink-0 text-[13px] text-slate-500">{plural(count, 'habit')}</span>
+						<Icon name="chevron-right" class="size-4 shrink-0 text-slate-600" strokeWidth={2.5} />
+					</a>
+				{/if}
+			</li>
+		{/each}
+	</ul>
+	<p class="mt-3 px-1 text-[13px] text-slate-500">
+		{reorder ? 'Order here is the order on your Today screen.' : 'Tap a stack to manage its habits.'}
+	</p>
+{/if}
 
-	{#if appState.stacks.length === 0}
-		<div class="text-center py-16">
-			<div class="text-6xl mb-4">🏗️</div>
-			<h2 class="text-xl font-semibold text-white mb-2">No stacks yet</h2>
-			<p class="text-slate-400 mb-6">Head to the Today page to create your first stack</p>
-			<a href="/" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-lg font-medium text-white inline-block">
-				Go to Today
-			</a>
-		</div>
-	{:else}
-		<div class="space-y-3">
-			{#each appState.stacks as stack, i (stack.id)}
-				{@const habitCount = appState.habits.filter(h => h.stack_id === stack.id).length}
-				<div class="rounded-2xl border {colorClasses(stack.color)} p-4">
-					{#if editingStackId === stack.id}
-						<div class="space-y-3">
-							<input
-								type="text"
-								bind:value={editName}
-								class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-							/>
-							<input
-								type="text"
-								bind:value={editTrigger}
-								placeholder="After I..."
-								class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-							/>
-							<div>
-								<span class="text-xs text-slate-400 mb-1 block">Color</span>
-								<div class="flex flex-wrap gap-2">
-									{#each STACK_COLORS as color}
-										<button
-											onclick={() => editColor = color}
-											class="w-7 h-7 rounded-full {colorBg(color)} {editColor === color ? 'ring-2 ring-white ring-offset-1 ring-offset-slate-900' : ''}"
-											aria-label="Select {color} color"
-										></button>
-									{/each}
-								</div>
-							</div>
-							<div>
-								<span class="text-xs text-slate-400 mb-1 block">Icon</span>
-								<div class="flex flex-wrap gap-2">
-									{#each STACK_ICONS as icon}
-										<button
-											onclick={() => editIcon = icon}
-											class="w-9 h-9 rounded-lg bg-slate-800 flex items-center justify-center {editIcon === icon ? 'ring-2 ring-indigo-500' : ''}"
-											aria-label="Select {icon} icon"
-										>
-											{icon}
-										</button>
-									{/each}
-								</div>
-							</div>
-							<div class="flex gap-2">
-								<button onclick={saveEdit} class="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm text-white">Save</button>
-								<button onclick={() => editingStackId = null} class="flex-1 py-2 bg-slate-700 rounded-lg text-sm text-white">Cancel</button>
-							</div>
-						</div>
-					{:else}
-						<div class="flex items-center justify-between">
-							<div class="flex items-center gap-3 flex-1 min-w-0">
-								{#if reorderMode}
-									<div class="flex flex-col gap-0.5 shrink-0">
-										<button
-											onclick={() => moveStack(i, i - 1)}
-											disabled={i === 0}
-											class="p-0.5 rounded hover:bg-slate-700 text-slate-500 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
-											aria-label="Move up"
-										>
-											<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7" />
-											</svg>
-										</button>
-										<button
-											onclick={() => moveStack(i, i + 1)}
-											disabled={i === appState.stacks.length - 1}
-											class="p-0.5 rounded hover:bg-slate-700 text-slate-500 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
-											aria-label="Move down"
-										>
-											<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-											</svg>
-										</button>
-									</div>
-								{/if}
-								<span class="text-2xl">{stack.icon}</span>
-								<div class="min-w-0">
-									<h3 class="font-semibold text-white truncate">{stack.name}</h3>
-									<p class="text-xs text-slate-400 truncate">{stack.trigger}</p>
-								</div>
-							</div>
-							{#if !reorderMode}
-								<div class="flex items-center gap-2">
-									<span class="text-xs text-slate-400">{habitCount} habit{habitCount !== 1 ? 's' : ''}</span>
-									<button onclick={() => startEdit(stack.id)} class="p-1.5 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white" aria-label="Edit stack">
-										<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-										</svg>
-									</button>
-								</div>
-							{/if}
-						</div>
-
-						<!-- Habits list -->
-						{#if habitCount > 0 && !reorderMode}
-							<div class="mt-3 space-y-1">
-								{#each appState.habits.filter(h => h.stack_id === stack.id) as habit (habit.id)}
-									<div class="flex items-center gap-2 text-sm text-slate-300 py-1">
-										<span class="w-1.5 h-1.5 rounded-full {colorBg(stack.color)}"></span>
-										{habit.name}
-									</div>
-								{/each}
-							</div>
-							<a href="/stacks/{stack.id}" class="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-indigo-400 hover:text-indigo-300 border border-indigo-500/30 hover:border-indigo-500/50 transition-colors">
-								Manage habits
-								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
-								</svg>
-							</a>
-						{/if}
-
-						<!-- Delete -->
-						{#if showDeleteConfirm === stack.id}
-							<div class="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-								<p class="text-sm text-red-400 mb-2">Delete this stack and all its habits?</p>
-								<div class="flex gap-2">
-									<button onclick={() => handleDelete(stack.id)} class="flex-1 py-1.5 bg-red-600 hover:bg-red-500 rounded text-sm text-white">Delete</button>
-									<button onclick={() => showDeleteConfirm = null} class="flex-1 py-1.5 bg-slate-700 rounded text-sm text-white">Cancel</button>
-								</div>
-							</div>
-						{:else if !reorderMode}
-							<button
-								onclick={() => showDeleteConfirm = stack.id}
-								class="mt-2 px-3 py-1.5 rounded-lg text-xs font-medium text-red-400/80 hover:text-red-400 border border-red-500/20 hover:border-red-500/40 transition-colors"
-							>Delete stack</button>
-						{/if}
-					{/if}
-				</div>
-			{/each}
-		</div>
-	{/if}
-</div>
+<StackSheet bind:open={showNewStack} />

@@ -1,19 +1,14 @@
-// PWA service worker registration
+// Service worker registration (production builds only — in dev it would cache stale modules).
 
-if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-	window.addEventListener('load', async () => {
-		try {
-			const registration = await navigator.serviceWorker.register('/service-worker.js', {
-				scope: '/'
+export function registerServiceWorker(): void {
+	if (!('serviceWorker' in navigator)) return;
+	navigator.serviceWorker
+		.register('/service-worker.js', { scope: '/' })
+		.then((registration) => {
+			// Look for a new version whenever the app comes back to the foreground.
+			document.addEventListener('visibilitychange', () => {
+				if (document.visibilityState === 'visible') registration.update().catch(() => {});
 			});
-			console.log('SW registered:', registration.scope);
-
-			// Check for updates periodically
-			setInterval(() => {
-				registration.update();
-			}, 60 * 60 * 1000); // Every hour
-		} catch (error) {
-			console.error('SW registration failed:', error);
-		}
-	});
+		})
+		.catch((error) => console.error('Service worker registration failed:', error));
 }

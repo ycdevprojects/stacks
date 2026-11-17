@@ -1,208 +1,172 @@
 <script lang="ts">
-	import { getAppState, createHabit, updateHabit, removeHabit, reorderHabits } from '$lib/stores/app.svelte';
+	import type { Habit } from '$lib/types';
+	import { flip } from 'svelte/animate';
 	import { page } from '$app/state';
-	import { showToast } from '$lib/stores/toast';
+	import { goto } from '$app/navigation';
+	import { getAppState, habitsOf, isDone, moveHabit } from '$lib/stores/app.svelte';
+	import { calculateStreak } from '$lib/utils/gamification';
+	import { addDays, dateOf, theme, haptic } from '$lib/utils/helpers';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import StackSheet from '$lib/components/StackSheet.svelte';
+	import HabitSheet from '$lib/components/HabitSheet.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 
-	const appState = getAppState();
+	const app = getAppState();
 
-	let stackId = $derived(page.params.id);
-	let stack = $derived(appState.stacks.find(s => s.id === stackId));
-	let habits = $derived(appState.habits.filter(h => h.stack_id === stackId).sort((a, b) => a.sort_order - b.sort_order));
+	const stack = $derived(app.stacks.find((s) => s.id === page.params.id) ?? null);
+	const habits = $derived(stack ? habitsOf(stack.id) : []);
+	const t = $derived(theme(stack?.color ?? 'indigo'));
+	const week = $derived(Array.from({ length: 7 }, (_, i) => addDays(app.today, i - 6)));
 
-	let showAddHabit = $state(false);
-	let newHabitName = $state('');
-	let newHabitDesc = $state('');
-	let editingHabitId = $state<string | null>(null);
-	let editName = $state('');
-	let editDesc = $state('');
-	let showDeleteConfirm = $state<string | null>(null);
-	let reorderMode = $state(false);
+	// Last 30 days: share of habit-days checked off, and days the whole stack was done.
+	const summary = $derived.by(() => {
+		if (!stack || habits.length === 0) return null;
+		// Only count days since the stack existed (creation or first check-in, whichever is earlier).
+		const ids = new Set(habits.map((h) => h.id));
+		const start = app.completions.reduce(
+			(min, c) => (ids.has(c.habit_id) && c.completed_at < min ? c.completed_at : min),
+			stack.created_at.slice(0, 10)
+		);
+		const days = Array.from({ length: 30 }, (_, i) => addDays(app.today, -i)).filter((d) => d >= start);
+		let checks = 0;
+		let fullDays = 0;
+		for (const d of days) {
+			const n = habits.filter((h) => isDone(h.id, d)).length;
+			checks += n;
+			if (n === habits.length) fullDays++;
+		}
+		return { rate: Math.round((checks / (days.length * habits.length)) * 100), fullDays };
+	});
 
-	async function handleAddHabit() {
-		if (!newHabitName.trim() || !stackId) return;
-		await createHabit(stackId, newHabitName.trim(), newHabitDesc.trim() || undefined);
-		newHabitName = '';
-		newHabitDesc = '';
-		showAddHabit = false;
-		showToast('success', 'Habit added!', undefined, '✅');
+	function streakOf(habitId: string): number {
+		return calculateStreak(app.completions.filter((c) => c.habit_id === habitId).map((c) => c.completed_at));
 	}
 
-	function startEdit(id: string) {
-		const habit = appState.habits.find(h => h.id === id);
-		if (!habit) return;
-		editingHabitId = id;
-		editName = habit.name;
-		editDesc = habit.description ?? '';
-	}
+	let showEdit = $state(false);
+	let showHabit = $state(false);
+	let editingHabit = $state<Habit | null>(null);
+	let reorder = $state(false);
 
-	async function saveEdit() {
-		if (!editingHabitId) return;
-		const habit = appState.habits.find(h => h.id === editingHabitId);
-		if (!habit) return;
-		await updateHabit({ ...habit, name: editName.trim(), description: editDesc.trim() || undefined });
-		editingHabitId = null;
-		showToast('success', 'Habit updated', undefined, '✏️');
-	}
-
-	async function handleDelete(id: string) {
-		await removeHabit(id);
-		showDeleteConfirm = null;
-		editingHabitId = null;
-		showToast('info', 'Habit deleted', undefined, '🗑️');
-	}
-
-	async function moveHabit(fromIndex: number, toIndex: number) {
-		if (!stackId) return;
-		if (toIndex < 0 || toIndex >= habits.length) return;
-		const ids = [...habits.map(h => h.id)];
-		const [moved] = ids.splice(fromIndex, 1);
-		ids.splice(toIndex, 0, moved);
-		await reorderHabits(stackId, ids);
+	function openHabit(habit: Habit | null) {
+		editingHabit = habit;
+		showHabit = true;
 	}
 </script>
 
-<div>
-	<a href="/stacks" class="text-indigo-400 hover:text-indigo-300 text-sm mb-4 inline-block">← All Stacks</a>
+<svelte:head><title>{stack?.name ?? 'Stack'} · Stackr</title></svelte:head>
 
-	{#if stack}
-		<div class="flex items-center justify-between mb-6">
-			<div class="flex items-center gap-3">
-				<span class="text-3xl">{stack.icon}</span>
-				<div>
-					<h1 class="text-2xl font-bold text-white">{stack.name}</h1>
-					<p class="text-sm text-slate-400">{stack.trigger}</p>
-				</div>
-			</div>
-			{#if habits.length > 1}
-				<button
-					onclick={() => reorderMode = !reorderMode}
-					class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors {reorderMode ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}"
-				>
-					{reorderMode ? 'Done' : 'Reorder'}
-				</button>
-			{/if}
-		</div>
-
-		<div class="space-y-2">
-			{#each habits as habit, i (habit.id)}
-				<div class="rounded-xl bg-slate-900 border border-slate-800 p-3">
-					{#if editingHabitId === habit.id}
-						<div class="space-y-2">
-							<input
-								type="text"
-								bind:value={editName}
-								class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-							/>
-							<input
-								type="text"
-								bind:value={editDesc}
-								placeholder="Description (optional)"
-								class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-							/>
-							<div class="flex gap-2">
-								<button onclick={saveEdit} class="flex-1 py-1.5 bg-indigo-600 rounded text-sm text-white">Save</button>
-								<button onclick={() => editingHabitId = null} class="flex-1 py-1.5 bg-slate-700 rounded text-sm text-white">Cancel</button>
-							</div>
-						</div>
-					{:else}
-						<div class="flex items-center justify-between">
-							<div class="flex items-center gap-2 flex-1 min-w-0">
-								{#if reorderMode}
-									<div class="flex flex-col gap-0.5 shrink-0">
-										<button
-											onclick={() => moveHabit(i, i - 1)}
-											disabled={i === 0}
-											class="p-0.5 rounded hover:bg-slate-700 text-slate-500 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
-											aria-label="Move up"
-										>
-											<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7" />
-											</svg>
-										</button>
-										<button
-											onclick={() => moveHabit(i, i + 1)}
-											disabled={i === habits.length - 1}
-											class="p-0.5 rounded hover:bg-slate-700 text-slate-500 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
-											aria-label="Move down"
-										>
-											<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-											</svg>
-										</button>
-									</div>
-								{/if}
-								<div class="min-w-0">
-									<h3 class="font-medium text-white text-sm">{habit.name}</h3>
-									{#if habit.description}
-										<p class="text-xs text-slate-400 mt-0.5">{habit.description}</p>
-									{/if}
-								</div>
-							</div>
-							{#if !reorderMode}
-								<div class="flex items-center gap-1">
-									<button onclick={() => startEdit(habit.id)} class="p-1.5 rounded hover:bg-slate-700 text-slate-400" aria-label="Edit habit">
-										<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-										</svg>
-									</button>
-									<button onclick={() => showDeleteConfirm = habit.id} class="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-red-400" aria-label="Delete habit">
-										<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-										</svg>
-									</button>
-								</div>
-							{/if}
-						</div>
-						{#if showDeleteConfirm === habit.id}
-							<div class="mt-2 p-2 bg-red-500/10 border border-red-500/20 rounded-lg">
-								<p class="text-xs text-red-400 mb-1">Delete "{habit.name}"?</p>
-								<div class="flex gap-2">
-									<button onclick={() => handleDelete(habit.id)} class="px-3 py-1 bg-red-600 rounded text-xs text-white">Delete</button>
-									<button onclick={() => showDeleteConfirm = null} class="px-3 py-1 bg-slate-700 rounded text-xs text-white">Cancel</button>
-								</div>
-							</div>
-						{/if}
-					{/if}
-				</div>
-			{/each}
-		</div>
-
-		<!-- Add Habit -->
-		{#if showAddHabit}
-			<div class="mt-3 p-4 card">
-				<h3 class="text-sm font-medium text-white mb-3">New Habit</h3>
-				<div class="space-y-2">
-					<input
-						type="text"
-						bind:value={newHabitName}
-						placeholder="Habit name"
-						class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-						onkeydown={(e) => e.key === 'Enter' && handleAddHabit()}
-					/>
-					<input
-						type="text"
-						bind:value={newHabitDesc}
-						placeholder="Description (optional)"
-						class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-					/>
-					<div class="flex gap-2">
-						<button onclick={handleAddHabit} class="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm text-white">Add</button>
-						<button onclick={() => { showAddHabit = false; newHabitName = ''; newHabitDesc = ''; }} class="flex-1 py-2 bg-slate-700 rounded-lg text-sm text-white">Cancel</button>
-					</div>
-				</div>
-			</div>
-		{:else}
-			<button
-				onclick={() => showAddHabit = true}
-				class="w-full mt-3 py-3 border border-dashed border-slate-700 rounded-xl text-slate-400 hover:text-white hover:border-indigo-500 transition-colors text-sm"
-			>
-				+ Add Habit
+<PageHeader title={stack?.name ?? 'Stack'} back={{ href: '/stacks', label: 'Stacks' }}>
+	{#snippet actions()}
+		{#if stack}
+			<button type="button" onclick={() => (showEdit = true)} class="rounded-full px-3 py-1.5 text-[17px] text-indigo-400 active:opacity-60">
+				Edit
 			</button>
 		{/if}
-	{:else}
-		<div class="text-center py-16">
-			<p class="text-slate-400">Stack not found</p>
-			<a href="/stacks" class="text-indigo-400 hover:text-indigo-300 text-sm mt-2 inline-block">← Back to Stacks</a>
+	{/snippet}
+</PageHeader>
+
+{#if stack}
+	<section class="card mb-6 p-5">
+		<div class="flex items-center gap-4">
+			<span class="grid size-16 shrink-0 place-items-center rounded-2xl text-3xl {t.soft}">{stack.icon}</span>
+			<p class="text-[15px] leading-snug text-slate-300">
+				<span class="font-semibold text-white">{stack.trigger}</span>, I will…
+			</p>
 		</div>
+		{#if summary}
+			<div class="mt-5 grid grid-cols-3 divide-x divide-white/5 text-center">
+				<div>
+					<p class="text-xl font-bold text-white tabular-nums">{habits.length}</p>
+					<p class="text-[11px] text-slate-500">habits</p>
+				</div>
+				<div>
+					<p class="text-xl font-bold text-white tabular-nums">{summary.rate}%</p>
+					<p class="text-[11px] text-slate-500">done, 30 days</p>
+				</div>
+				<div>
+					<p class="text-xl font-bold text-white tabular-nums">{summary.fullDays}</p>
+					<p class="text-[11px] text-slate-500">full days</p>
+				</div>
+			</div>
+		{/if}
+	</section>
+
+	<div class="mb-2 flex items-center justify-between px-1">
+		<h2 class="section-title mb-0">Habits</h2>
+		{#if habits.length > 1}
+			<button type="button" onclick={() => (reorder = !reorder)} class="text-[15px] font-medium text-indigo-400 active:opacity-60">
+				{reorder ? 'Done' : 'Reorder'}
+			</button>
+		{/if}
+	</div>
+
+	{#if habits.length > 0}
+		<ul class="card divide-y divide-white/5 overflow-hidden">
+			{#each habits as habit, i (habit.id)}
+				<li animate:flip={{ duration: 220 }} class="bg-slate-900">
+					{#if reorder}
+						<div class="flex items-center gap-3 px-4 py-3">
+							<span class="min-w-0 flex-1 truncate text-[15px] text-white">{habit.name}</span>
+							<button
+								type="button"
+								class="grid size-10 place-items-center rounded-full bg-slate-800 text-slate-300 active:bg-slate-700 disabled:opacity-30"
+								disabled={i === 0}
+								onclick={() => (haptic(6), moveHabit(habit.id, -1))}
+								aria-label="Move {habit.name} up"
+							>
+								<Icon name="chevron-up" class="size-5" strokeWidth={2.25} />
+							</button>
+							<button
+								type="button"
+								class="grid size-10 place-items-center rounded-full bg-slate-800 text-slate-300 active:bg-slate-700 disabled:opacity-30"
+								disabled={i === habits.length - 1}
+								onclick={() => (haptic(6), moveHabit(habit.id, 1))}
+								aria-label="Move {habit.name} down"
+							>
+								<Icon name="chevron-down" class="size-5" strokeWidth={2.25} />
+							</button>
+						</div>
+					{:else}
+						{@const streak = streakOf(habit.id)}
+						<button type="button" onclick={() => openHabit(habit)} class="flex w-full items-center gap-3 px-4 py-3.5 text-left active:bg-white/5">
+							<span class="min-w-0 flex-1">
+								<span class="block truncate text-[15px] text-white">{habit.name}</span>
+								{#if habit.description}
+									<span class="block truncate text-xs text-slate-500">{habit.description}</span>
+								{/if}
+								<span class="mt-2 flex items-center gap-1" aria-label="Last 7 days">
+									{#each week as d (d)}
+										<span
+											class="size-2.5 rounded-full {isDone(habit.id, d) ? t.solid : 'bg-slate-800'}"
+											title={dateOf(d).toLocaleDateString(undefined, { weekday: 'short' })}
+										></span>
+									{/each}
+									{#if streak > 1}
+										<span class="ml-1.5 text-xs font-semibold text-orange-400">🔥 {streak}</span>
+									{/if}
+								</span>
+							</span>
+							<Icon name="chevron-right" class="size-4 shrink-0 text-slate-600" strokeWidth={2.5} />
+						</button>
+					{/if}
+				</li>
+			{/each}
+		</ul>
+	{:else}
+		<p class="card px-4 py-6 text-center text-[15px] text-slate-400">No habits yet. Keep each one under two minutes.</p>
 	{/if}
-</div>
+
+	{#if !reorder}
+		<button type="button" onclick={() => openHabit(null)} class="btn-secondary mt-4 flex w-full items-center justify-center gap-2">
+			<Icon name="plus" class="size-5" strokeWidth={2.25} /> Add Habit
+		</button>
+	{/if}
+
+	<StackSheet bind:open={showEdit} {stack} ondeleted={() => goto('/stacks', { replaceState: true })} />
+	<HabitSheet bind:open={showHabit} {stack} habit={editingHabit} />
+{:else}
+	<div class="flex flex-col items-center py-16 text-center">
+		<p class="text-[15px] text-slate-400">This stack doesn’t exist anymore.</p>
+		<a href="/stacks" class="btn-secondary mt-4">Back to Stacks</a>
+	</div>
+{/if}

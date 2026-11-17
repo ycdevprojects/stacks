@@ -1,311 +1,294 @@
 <script lang="ts">
-	import { getAppState, toggleCompletion, createStack, createHabit } from '$lib/stores/app.svelte';
-	import { today, formatDate, randomColor, randomIcon, colorClasses, completedBg } from '$lib/utils/helpers';
+	import type { Stack } from '$lib/types';
+	import { getAppState, toggleCompletion, createStack, isDone, habitsOf } from '$lib/stores/app.svelte';
 	import { calculateStreak, xpProgressInLevel } from '$lib/utils/gamification';
-	import { calculateCompletionXP } from '$lib/stores/profile';
-	import NewStackModal from '$lib/components/NewStackModal.svelte';
-	import DateNav from '$lib/components/DateNav.svelte';
-	import { showToast } from '$lib/stores/toast';
+	import { formatDate, greeting, theme, addDays, haptic } from '$lib/utils/helpers';
+	import { STACK_TEMPLATES, type StackTemplate } from '$lib/utils/templates';
+	import { announceToggle, announceBadges } from '$lib/utils/feedback';
+	import { showToast } from '$lib/stores/toast.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import WeekStrip from '$lib/components/WeekStrip.svelte';
+	import ProgressRing from '$lib/components/ProgressRing.svelte';
+	import StackSheet from '$lib/components/StackSheet.svelte';
+	import HabitSheet from '$lib/components/HabitSheet.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 
-	const appState = getAppState();
+	const app = getAppState();
 
-	let selectedDate = $state(today());
+	let selectedDate = $state(app.today);
 	let showNewStack = $state(false);
-	let newStackName = $state('');
-	let newStackTrigger = $state('');
-	let newStackColor = $state(randomColor());
-	let newStackIcon = $state(randomIcon());
-	let newHabitStackId = $state<string | null>(null);
-	let newHabitName = $state('');
+	let habitSheetStack = $state<Stack | null>(null);
+	let showHabitSheet = $state(false);
 
-	const dateObj = $derived(new Date(selectedDate + 'T12:00:00'));
-	const dayName = $derived(dateObj.toLocaleDateString('en-US', { weekday: 'long' }));
-	const monthName = $derived(dateObj.toLocaleDateString('en-US', { month: 'long' }));
-	const dateNum = $derived(dateObj.getDate());
+	// Follow the calendar across midnight if the user was looking at "today".
+	let lastToday = app.today;
+	$effect(() => {
+		const t = app.today;
+		if (selectedDate === lastToday) selectedDate = t;
+		lastToday = t;
+	});
 
-	function getStackChecklist() {
-		return appState.stacks.map(stack => {
-			const stackHabits = appState.habits.filter(h => h.stack_id === stack.id);
-			const completedCount = stackHabits.filter(h =>
-				appState.completions.some(c => c.habit_id === h.id && c.completed_at === selectedDate)
-			).length;
-			return {
-				...stack,
-				habits: stackHabits,
-				completedCount,
-				totalCount: stackHabits.length,
-				allComplete: stackHabits.length > 0 && completedCount === stackHabits.length
-			};
-		});
-	}
-
-	async function handleToggle(habitId: string) {
-		// Haptic feedback
-		if (navigator.vibrate) navigator.vibrate(10);
-
-		const wasCompleted = appState.completions.some(c => c.habit_id === habitId && c.completed_at === selectedDate);
-		const oldProfile = appState.profile;
-
-		await toggleCompletion(habitId, selectedDate);
-
-		const nowCompleted = appState.completions.some(c => c.habit_id === habitId && c.completed_at === selectedDate);
-
-		if (nowCompleted && !wasCompleted && oldProfile) {
-			// Completed — show the streak the real award actually used: profile.ts
-			// recalculates it from completion dates (not simply old streak + 1, e.g.
-			// after a gap in completions), so the displayed streak bonus can never
-			// overstate. Display-only.
-			const awardedStreak = calculateStreak(appState.completions.map(c => c.completed_at));
-			const xpGain = calculateCompletionXP(
-				appState.completions, appState.stacks, appState.habits,
-				awardedStreak, habitId, selectedDate
-			);
-			showToast('xp', `+${xpGain.total} XP`, undefined, '✨');
-
-			// Check for level up
-			if (appState.profile && appState.profile.level > oldProfile.level) {
-				setTimeout(() => {
-					showToast('levelup', `Level ${appState.profile!.level}!`, undefined, '🎉');
-				}, 800);
-			}
-
-			// Check for full stack — only THIS habit's own stack, consistent
-			// with the scoped +25 XP bonus (the toggled habit was not complete
-			// before, so allComplete now means this completion completed it)
-			const habitStackId = appState.habits.find(h => h.id === habitId)?.stack_id;
-			const ownStack = getStackChecklist().find(s => s.id === habitStackId);
-			if (ownStack?.allComplete) {
-				setTimeout(() => {
-					showToast('success', 'Stack complete!', `+25 bonus XP`, '✅');
-				}, 400);
-			}
-		} else if (!nowCompleted && wasCompleted) {
-			showToast('info', 'Unmarked', undefined, '↩️');
-		}
-	}
-
-	async function handleCreateStack() {
-		if (!newStackName.trim() || !newStackTrigger.trim()) return;
-		await createStack(newStackName.trim(), newStackTrigger.trim(), newStackColor, newStackIcon);
-		resetNewStack();
-		showToast('success', 'Stack created!', undefined, '🏗️');
-	}
-
-	function resetNewStack() {
-		newStackName = '';
-		newStackTrigger = '';
-		newStackColor = randomColor();
-		newStackIcon = randomIcon();
-		showNewStack = false;
-	}
-
-	async function handleCreateHabit() {
-		if (!newHabitName.trim() || !newHabitStackId) return;
-		await createHabit(newHabitStackId, newHabitName.trim());
-		newHabitName = '';
-		newHabitStackId = null;
-		showToast('success', 'Habit added!', undefined, '✅');
-	}
-
-	function getHabitStreak(habitId: string): number {
-		const dates = appState.completions
-			.filter(c => c.habit_id === habitId)
-			.map(c => c.completed_at);
-		return calculateStreak(dates);
-	}
-
-	function isHabitCompletedOnDate(habitId: string): boolean {
-		return appState.completions.some(c => c.habit_id === habitId && c.completed_at === selectedDate);
-	}
-
-	let checklist = $derived(getStackChecklist());
-	let progress = $derived(appState.profile ? xpProgressInLevel(appState.profile.xp) : null);
-
-	// Streak nudge: habits with streaks >= 3 that haven't been completed today (only on today's view)
-	let streakAtRisk = $derived(
-		selectedDate === today()
-			? appState.habits
-				.filter(h => !isHabitCompletedOnDate(h.id) && getHabitStreak(h.id) >= 3)
-				.map(h => ({ name: h.name, streak: getHabitStreak(h.id) }))
-			: []
+	const isToday = $derived(selectedDate === app.today);
+	const title = $derived(
+		isToday ? 'Today' : selectedDate === addDays(app.today, -1) ? 'Yesterday' : formatDate(selectedDate, { weekday: 'long' })
+	);
+	const eyebrow = $derived(
+		isToday
+			? `${greeting(new Date().getHours())} · ${formatDate(selectedDate, { month: 'long', day: 'numeric' })}`
+			: formatDate(selectedDate, { month: 'long', day: 'numeric', year: 'numeric' })
 	);
 
-	// Check if date is in the past (no adding habits on past days)
-	let isPastDate = $derived(selectedDate < today());
+	const checklist = $derived(
+		app.stacks.map((stack) => {
+			const habits = habitsOf(stack.id);
+			const done = habits.filter((h) => isDone(h.id, selectedDate)).length;
+			return { stack, habits, done, total: habits.length };
+		})
+	);
+	const totals = $derived(
+		checklist.reduce((acc, s) => ({ done: acc.done + s.done, total: acc.total + s.total }), { done: 0, total: 0 })
+	);
+
+	const streaks = $derived.by(() => {
+		const dates = new Map<string, string[]>();
+		for (const c of app.completions) {
+			const list = dates.get(c.habit_id);
+			if (list) list.push(c.completed_at);
+			else dates.set(c.habit_id, [c.completed_at]);
+		}
+		return new Map(app.habits.map((h) => [h.id, calculateStreak(dates.get(h.id) ?? [])]));
+	});
+
+	const atRisk = $derived(
+		isToday ? app.habits.filter((h) => !isDone(h.id, app.today) && (streaks.get(h.id) ?? 0) >= 3) : []
+	);
+
+	const progress = $derived(xpProgressInLevel(app.profile?.xp ?? 0));
+
+	function ratioFor(date: string): number {
+		return app.habits.length ? app.habits.filter((h) => isDone(h.id, date)).length / app.habits.length : 0;
+	}
+
+	async function toggle(habitId: string) {
+		const result = await toggleCompletion(habitId, selectedDate);
+		if (result) announceToggle(result);
+	}
+
+	function addHabit(stack: Stack) {
+		habitSheetStack = stack;
+		showHabitSheet = true;
+	}
+
+	let creatingTemplate = $state(false);
+	async function useTemplate(t: StackTemplate) {
+		if (creatingTemplate) return;
+		creatingTemplate = true;
+		try {
+			haptic(10);
+			const { newBadges } = await createStack(
+				{ name: t.name, trigger: t.trigger, color: t.color, icon: t.icon },
+				t.habits
+			);
+			showToast('success', 'Stack created', t.name, t.icon);
+			announceBadges(newBadges, 700);
+		} finally {
+			creatingTemplate = false;
+		}
+	}
 </script>
 
-<div>
-	<!-- Date Navigation -->
-	<DateNav bind:selectedDate={selectedDate} />
+<svelte:head><title>Today · Stackr</title></svelte:head>
 
-	<!-- Header with date -->
-	<div class="flex items-center justify-between mb-4">
-		<div>
-			<p class="text-slate-400 text-sm">{dayName}</p>
-			<h1 class="text-2xl font-bold text-white">{monthName} {dateNum}</h1>
-		</div>
-		{#if appState.profile}
-			<div class="flex items-center gap-3">
-				<div class="text-right">
-					<div class="text-sm font-medium text-indigo-400">Level {appState.profile.level}</div>
-					<div class="text-xs text-slate-500">{appState.profile.xp} XP</div>
-				</div>
-				<div class="w-10 h-10 rounded-full bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-lg">
-					{appState.profile.streak_days > 0 ? '🔥' : '⭐'}
-				</div>
-			</div>
+<PageHeader {title} {eyebrow}>
+	{#snippet actions()}
+		{#if app.profile}
+			<a href="/stats" class="pressable flex items-center gap-2 rounded-full bg-slate-900 py-1 pr-3 pl-1 ring-1 ring-white/5" aria-label="Level {app.profile.level}, view stats">
+				<ProgressRing value={progress.percent / 100} size={30} stroke={3}>
+					<span class="text-[11px] font-bold text-white">{app.profile.level}</span>
+				</ProgressRing>
+				<span class="text-[13px] font-semibold text-slate-200">
+					{#if app.profile.streak_days > 0}🔥 {app.profile.streak_days}{:else}Lv {app.profile.level}{/if}
+				</span>
+			</a>
 		{/if}
+	{/snippet}
+</PageHeader>
+
+{#if app.stacks.length === 0}
+	<!-- First run -->
+	<section class="card mb-6 p-5">
+		<div class="mb-3 grid size-12 place-items-center rounded-2xl bg-indigo-500/15 text-2xl">🧱</div>
+		<h2 class="text-lg font-bold text-white">Stack tiny habits onto routines you already have</h2>
+		<p class="mt-1.5 text-[15px] leading-relaxed text-slate-400">
+			Pick a moment you never skip — pouring coffee, brushing your teeth — and attach a few two-minute habits to it.
+			Check them off, earn XP, and watch your room fill up.
+		</p>
+	</section>
+
+	<h2 class="section-title">Start with a template</h2>
+	<div class="space-y-2.5">
+		{#each STACK_TEMPLATES as t (t.name)}
+			<button
+				type="button"
+				disabled={creatingTemplate}
+				onclick={() => useTemplate(t)}
+				class="card pressable flex w-full items-center gap-3.5 p-4 text-left"
+			>
+				<span class="grid size-12 shrink-0 place-items-center rounded-2xl text-2xl {theme(t.color).soft}">{t.icon}</span>
+				<span class="min-w-0 flex-1">
+					<span class="block font-semibold text-white">{t.name}</span>
+					<span class="block truncate text-[13px] text-slate-400">{t.trigger}</span>
+					<span class="mt-0.5 block truncate text-xs text-slate-500">{t.habits.join(' · ')}</span>
+				</span>
+				<Icon name="plus" class="size-5 shrink-0 text-indigo-400" strokeWidth={2.25} />
+			</button>
+		{/each}
 	</div>
 
-	<!-- XP Progress -->
-	{#if appState.profile && appState.profile.level > 0 && progress}
-		<div class="mb-6">
-			<div class="flex justify-between text-xs text-slate-400 mb-1">
-				<span>Level {appState.profile.level}</span>
-				<span>Level {appState.profile.level + 1}</span>
-			</div>
-			<div class="h-2 bg-slate-800 rounded-full overflow-hidden">
-				<div
-					class="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all duration-500"
-					style="width: {progress.percent}%"
-				></div>
-			</div>
-			<div class="text-xs text-slate-500 mt-1 text-center">{progress.current} / {progress.needed} XP</div>
-		</div>
-	{/if}
+	<button type="button" class="btn-secondary mt-4 w-full" onclick={() => (showNewStack = true)}>
+		Build my own stack
+	</button>
+{:else}
+	<WeekStrip bind:selected={selectedDate} today={app.today} ratio={ratioFor} />
 
-	<!-- Streak Nudge (only today) -->
-	{#if streakAtRisk.length > 0}
-		<div class="mb-4 px-4 py-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-3">
-			<span class="text-2xl">⚠️</span>
-			<div>
-				<p class="text-sm font-medium text-amber-400">
-					{streakAtRisk.length === 1 ? 'Streak at risk!' : `${streakAtRisk.length} streaks at risk`}
-				</p>
-				<p class="text-xs text-slate-400">
-					{streakAtRisk.length === 1
-						? `${streakAtRisk[0].name} — ${streakAtRisk[0].streak}-day streak`
-						: 'Complete them today to keep your streaks alive'}
-				</p>
-			</div>
-		</div>
-	{/if}
-
-	<!-- Stacks Checklist -->
-	{#if checklist.length === 0}
-		<div class="text-center py-16">
-			<div class="text-6xl mb-4">🏗️</div>
-			<h2 class="text-xl font-semibold text-white mb-2">No stacks yet</h2>
-			<p class="text-slate-400 mb-6">Create your first habit stack to get started</p>
-			{#if !isPastDate}
-				<button
-					onclick={() => showNewStack = true}
-					class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-lg font-medium text-white"
-				>
-					Create Your First Stack
-				</button>
-			{/if}
-		</div>
-	{:else}
-		<div class="space-y-4">
-			{#each checklist as stack (stack.id)}
-				<div class="rounded-2xl border {colorClasses(stack.color)} overflow-hidden">
-					<a href="/stacks/{stack.id}" class="block px-4 py-3 flex items-center justify-between hover:bg-white/[0.02] transition-colors">
-						<div class="flex items-center gap-2">
-							<span class="text-xl">{stack.icon}</span>
-							<div>
-								<h3 class="font-semibold text-white text-sm">{stack.name}</h3>
-								<p class="text-xs text-slate-400">{stack.trigger}</p>
-							</div>
-						</div>
-						<div class="flex items-center gap-2">
-							{#if stack.allComplete}
-								<span class="text-xs {completedBg(stack.color)} text-white px-2 py-0.5 rounded-full">Done!</span>
-							{:else}
-								<span class="text-xs text-slate-400">{stack.completedCount}/{stack.totalCount}</span>
-							{/if}
-							<svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
-							</svg>
-						</div>
-					</a>
-
-					<!-- Habits checklist -->
-					{#if stack.habits.length > 0}
-						<div class="px-2 pb-2 space-y-0.5">
-							{#each stack.habits as habit (habit.id)}
-								{@const completed = isHabitCompletedOnDate(habit.id)}
-								{@const streak = getHabitStreak(habit.id)}
-								<button
-									onclick={() => handleToggle(habit.id)}
-									class="w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all {completed
-										? 'bg-slate-800/50'
-										: 'bg-slate-900/50 hover:bg-slate-800/50'}"
-								>
-									<div class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all {completed
-										? completedBg(stack.color) + ' border-transparent'
-										: 'border-slate-600'}">
-										{#if completed}
-											<svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-											</svg>
-										{/if}
-									</div>
-									<span class="flex-1 text-left text-sm {completed ? 'text-slate-500 line-through' : 'text-white'}">
-										{habit.name}
-									</span>
-									{#if streak > 1}
-										<span class="text-xs text-orange-400">🔥 {streak}</span>
-									{/if}
-								</button>
-							{/each}
-						</div>
-					{/if}
-
-					<!-- Add habit inline (only for today) -->
-					{#if !isPastDate && newHabitStackId === stack.id}
-						<div class="px-4 pb-3">
-							<div class="flex gap-2">
-								<input
-									type="text"
-									bind:value={newHabitName}
-									placeholder="New habit..."
-									class="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-									onkeydown={(e) => e.key === 'Enter' && handleCreateHabit()}
-								/>
-								<button onclick={handleCreateHabit} class="px-3 py-2 bg-indigo-600 rounded-lg text-sm text-white">Add</button>
-								<button onclick={() => { newHabitStackId = null; newHabitName = ''; }} class="px-3 py-2 bg-slate-700 rounded-lg text-sm text-white">✕</button>
-							</div>
-						</div>
-					{:else if !isPastDate}
-						<button
-							onclick={() => newHabitStackId = stack.id}
-							class="w-full px-4 py-2.5 text-xs text-slate-400 hover:text-white hover:bg-slate-800/30 transition-colors border-t border-slate-700/30"
-						>
-							+ Add habit
-						</button>
-					{/if}
-				</div>
-			{/each}
-		</div>
-
-		{#if !isPastDate}
-			<button
-				onclick={() => showNewStack = true}
-				class="w-full mt-4 py-3 border border-dashed border-slate-700 rounded-xl text-slate-400 hover:text-white hover:border-indigo-500 transition-colors"
+	<!-- Day summary -->
+	{#if totals.total > 0}
+		<section class="card mb-4 flex items-center gap-4 p-4">
+			<ProgressRing
+				value={totals.done / totals.total}
+				size={64}
+				stroke={6}
+				class={totals.done === totals.total ? 'text-emerald-400' : 'text-indigo-400'}
 			>
-				+ New Stack
-			</button>
-		{/if}
+				<span class="text-sm font-bold text-white">{Math.round((totals.done / totals.total) * 100)}%</span>
+			</ProgressRing>
+			<div class="min-w-0 flex-1">
+				{#if totals.done === totals.total}
+					<p class="font-semibold text-white">All done{isToday ? ' for today' : ''} 🎉</p>
+					<p class="text-[13px] text-slate-400">Every habit checked off. Nice stacking.</p>
+				{:else}
+					<p class="font-semibold text-white">{totals.done} of {totals.total} habits done</p>
+					<p class="text-[13px] text-slate-400">
+						{isToday ? `${totals.total - totals.done} to go today` : 'Missed one? You can still log it.'}
+					</p>
+				{/if}
+				<div class="mt-2.5 flex items-center gap-2">
+					<div class="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800">
+						<div
+							class="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-400 transition-[width] duration-500"
+							style:width="{progress.percent}%"
+						></div>
+					</div>
+					<span class="text-[11px] font-medium text-slate-500 tabular-nums">Lv {app.profile?.level ?? 0} · {progress.current}/{progress.needed}</span>
+				</div>
+			</div>
+		</section>
 	{/if}
-</div>
 
-<NewStackModal
-	bind:show={showNewStack}
-	bind:name={newStackName}
-	bind:trigger={newStackTrigger}
-	bind:color={newStackColor}
-	bind:icon={newStackIcon}
-	onclose={resetNewStack}
-	oncreate={handleCreateStack}
-/>
+	{#if atRisk.length > 0}
+		<div class="mb-4 flex items-center gap-3 rounded-2xl bg-amber-500/10 px-4 py-3 ring-1 ring-amber-500/20">
+			<span class="text-xl">🔥</span>
+			<p class="text-[13px] text-amber-200">
+				{#if atRisk.length === 1}
+					Keep your <b>{streaks.get(atRisk[0].id)}-day</b> streak on <b>{atRisk[0].name}</b> alive today.
+				{:else}
+					<b>{atRisk.length} streaks</b> are waiting on you today.
+				{/if}
+			</p>
+		</div>
+	{/if}
+
+	<div class="space-y-4">
+		{#each checklist as { stack, habits, done, total } (stack.id)}
+			{@const t = theme(stack.color)}
+			<section class="card overflow-hidden" aria-label={stack.name}>
+				<a href="/stacks/{stack.id}" class="flex items-center gap-3 px-4 pt-4 pb-2 active:opacity-70">
+					<span class="grid size-10 shrink-0 place-items-center rounded-xl text-xl {t.soft}">{stack.icon}</span>
+					<span class="min-w-0 flex-1">
+						<span class="block truncate font-semibold text-white">{stack.name}</span>
+						<span class="block truncate text-[13px] text-slate-400">{stack.trigger}</span>
+					</span>
+					{#if total > 0}
+						<ProgressRing value={done / total} size={32} stroke={3} class={t.text}>
+							{#if done === total}
+								<Icon name="check" class="size-4" strokeWidth={3} />
+							{:else}
+								<span class="text-[11px] font-semibold text-slate-300">{done}/{total}</span>
+							{/if}
+						</ProgressRing>
+					{/if}
+				</a>
+
+				<ul class="px-2 pb-2">
+					{#each habits as habit (habit.id)}
+						{@const completed = isDone(habit.id, selectedDate)}
+						{@const streak = streaks.get(habit.id) ?? 0}
+						<li>
+							<button
+								type="button"
+								onclick={() => toggle(habit.id)}
+								aria-pressed={completed}
+								class="flex min-h-14 w-full items-center gap-3 rounded-2xl px-2.5 py-2 text-left transition-colors active:bg-white/5"
+							>
+								<span
+									class="grid size-7 shrink-0 place-items-center rounded-full transition-all duration-200 {completed
+										? `${t.solid} check-pop`
+										: 'ring-2 ring-slate-600 ring-inset'}"
+								>
+									{#if completed}<Icon name="check" class="size-4 text-white" strokeWidth={3} />{/if}
+								</span>
+								<span class="min-w-0 flex-1">
+									<span
+										class="block text-[15px] transition-colors {completed ? 'text-slate-500 line-through decoration-slate-600' : 'text-white'}"
+										>{habit.name}</span
+									>
+									{#if habit.description}
+										<span class="block truncate text-xs text-slate-500">{habit.description}</span>
+									{/if}
+								</span>
+								{#if streak > 1}
+									<span class="shrink-0 text-xs font-semibold text-orange-400 tabular-nums">🔥 {streak}</span>
+								{/if}
+							</button>
+						</li>
+					{:else}
+						<li class="px-2.5 pb-1 text-[13px] text-slate-500">No habits yet — add a tiny one.</li>
+					{/each}
+				</ul>
+
+				<button
+					type="button"
+					onclick={() => addHabit(stack)}
+					class="flex w-full items-center gap-2 border-t border-white/5 px-5 py-3 text-[13px] font-medium text-slate-400 active:bg-white/5"
+				>
+					<Icon name="plus" class="size-4" strokeWidth={2.25} /> Add habit
+				</button>
+			</section>
+		{/each}
+	</div>
+
+	<button
+		type="button"
+		onclick={() => (showNewStack = true)}
+		class="pressable mt-4 flex w-full items-center justify-center gap-2 rounded-3xl border border-dashed border-slate-700 py-4 text-[15px] font-medium text-slate-400 active:border-indigo-500 active:text-white"
+	>
+		<Icon name="plus" class="size-5" strokeWidth={2} /> New Stack
+	</button>
+{/if}
+
+<StackSheet bind:open={showNewStack} />
+<HabitSheet bind:open={showHabitSheet} stack={habitSheetStack} />
+
+<style>
+	:global(.check-pop) {
+		animation: check-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+	}
+	@keyframes check-pop {
+		0% {
+			transform: scale(0.6);
+		}
+		100% {
+			transform: scale(1);
+		}
+	}
+</style>

@@ -5,8 +5,12 @@ import {
 	checkStreakBadges,
 	checkCompletionBadges,
 	checkLevelBadges,
-	checkAllAchievements
+	checkAllAchievements,
+	timeOfDayBadges,
+	badgeProgress
 } from '$lib/utils/badges';
+import { STACK_TEMPLATES } from '$lib/utils/templates';
+import { STACK_COLORS, STACK_ICONS } from '$lib/utils/helpers';
 
 describe('BADGES definitions', () => {
 	it('has badges defined', () => {
@@ -189,5 +193,49 @@ describe('checkAllAchievements', () => {
 		// streak(5) + completion(6) + level(4) + stack(3) + special(2) = 20
 		const results = checkAllAchievements(0, 0, 0, 0, false);
 		expect(results.length).toBe(20);
+	});
+});
+describe('timeOfDayBadges', () => {
+	it('flags night owl from midnight to 4 AM', () => {
+		for (const h of [0, 1, 2, 3]) expect(timeOfDayBadges(h)).toEqual({ isNightOwl: true, isEarlyBird: false });
+	});
+
+	it('flags early bird from 4 to 7 AM', () => {
+		for (const h of [4, 5, 6]) expect(timeOfDayBadges(h)).toEqual({ isNightOwl: false, isEarlyBird: true });
+	});
+
+	it('flags neither during the day or evening', () => {
+		for (const h of [7, 12, 18, 23]) expect(timeOfDayBadges(h)).toEqual({ isNightOwl: false, isEarlyBird: false });
+	});
+});
+
+describe('badgeProgress', () => {
+	const stats = { longestStreak: 5, totalCompletions: 42, level: 3, stackCount: 2 };
+
+	it('reports progress toward numeric badges', () => {
+		expect(badgeProgress('streak_7', stats)).toEqual({ current: 5, target: 7 });
+		expect(badgeProgress('complete_50', stats)).toEqual({ current: 42, target: 50 });
+		expect(badgeProgress('level_5', stats)).toEqual({ current: 3, target: 5 });
+		expect(badgeProgress('stack_5', stats)).toEqual({ current: 2, target: 5 });
+	});
+
+	it('caps progress at the target', () => {
+		expect(badgeProgress('streak_3', stats)).toEqual({ current: 3, target: 3 });
+	});
+
+	it('returns null for one-off badges', () => {
+		expect(badgeProgress('full_stack', stats)).toBeNull();
+		expect(badgeProgress('night_owl', stats)).toBeNull();
+	});
+});
+
+describe('STACK_TEMPLATES', () => {
+	it('use known colors and icons and come with habits', () => {
+		for (const t of STACK_TEMPLATES) {
+			expect(STACK_COLORS).toContain(t.color);
+			expect(STACK_ICONS).toContain(t.icon);
+			expect(t.habits.length).toBeGreaterThan(0);
+			expect(t.trigger.length).toBeGreaterThan(0);
+		}
 	});
 });

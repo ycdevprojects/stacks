@@ -1,20 +1,20 @@
-// Profile and achievement logic — pure functions that operate on state
-// Called from the main app store which holds all $state variables
-// Local-only mode — no sync queue
+// Profile XP and achievement logic — functions over state passed in by the
+// app store (app.svelte.ts), which owns the $state.
 
 import type { Stack, Habit, Completion, Achievement, Profile } from '$lib/types';
 import * as db from '$lib/services/db';
-import { calculateStreak, levelFromXp } from '$lib/utils/gamification';
+import {
+	calculateStreak,
+	levelFromXp,
+	XP_PER_HABIT,
+	XP_STACK_BONUS,
+	XP_STREAK_PER_DAY,
+	MAX_STREAK_BONUS
+} from '$lib/utils/gamification';
 import { generateId, today } from '$lib/utils/helpers';
 import { checkAllAchievements } from '$lib/utils/badges';
 
-const XP_PER_HABIT = 10;
-const XP_STACK_BONUS = 25;
-const XP_STREAK_PER_DAY = 5;
-const MAX_STREAK_BONUS = 50;
-
-/** All habits in the given stack have a completion on `dateStr` in `completions`.
- *  Also exercised directly by unit tests. */
+/** All habits in the given stack have a completion on `dateStr` in `completions`. */
 export function isStackCompleteOnDate(
 	stackId: string,
 	habits: Habit[],
@@ -205,14 +205,17 @@ export async function checkAndUnlockAchievements(
 	achievements: Achievement[],
 	stacks: Stack[],
 	userId: string,
-	fullStackToday: boolean
+	fullStackToday: boolean,
+	timeOfDay: { isNightOwl?: boolean; isEarlyBird?: boolean } = {}
 ): Promise<{ newAchievements: Achievement[]; badgeKeys: string[] }> {
 	const results = checkAllAchievements(
 		profile.longest_streak,
 		profile.total_completions,
 		profile.level,
 		stacks.length,
-		fullStackToday
+		fullStackToday,
+		timeOfDay.isNightOwl ?? false,
+		timeOfDay.isEarlyBird ?? false
 	);
 
 	const newAchievements: Achievement[] = [];
