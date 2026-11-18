@@ -435,6 +435,50 @@ SPRITES = {
     ],
 }
 
+# The cat sitting up (awake), facing left, in two tail positions.
+CAT_HEAD = [
+    ".Q...Q.......",
+    ".QQ.QQ.......",
+    ".qqqqq.......",
+    "qjqqjqq......",
+    "qqqpqqq......",
+    ".qqqqq.......",
+    "..qqqq.......",
+]
+CAT_SIT = {
+    "cat-sit-a": CAT_HEAD + [
+        ".qqqqqq...Q..",
+        ".qqQqqqq..Q..",
+        ".qqqqQqq..q..",
+        ".qqqqqqq.qq..",
+        ".qWqqqWqqq...",
+        ".WWqqqWW.....",
+    ],
+    "cat-sit-b": CAT_HEAD + [
+        ".qqqqqq......",
+        ".qqQqqqq.....",
+        ".qqqqQqq.....",
+        ".qqqqqqq.....",
+        ".qWqqqWqqqQq.",
+        ".WWqqqWW..qQ.",
+    ],
+}
+
+
+def cat_sit_frames() -> None:
+    """Both frames padded, outlined and cropped to one shared box so they swap in place."""
+    frames = {}
+    for name, rows in CAT_SIT.items():
+        padded = ["." * (len(rows[0]) + 2)] + ["." + r + "." for r in rows] + ["." * (len(rows[0]) + 2)]
+        frames[name] = outline(draw(padded, PALETTE), crop=False)
+    box = None
+    for im in frames.values():
+        b = im.getbbox()
+        box = b if box is None else (min(box[0], b[0]), min(box[1], b[1]), max(box[2], b[2]), max(box[3], b[3]))
+    for name, im in frames.items():
+        im.crop(box).save(DECOR / f"{name}.png")
+
+
 # Trophy cups: 1 = light, 2 = mid, 3 = dark metal.
 TROPHY = [
     "22222222",
@@ -504,7 +548,7 @@ def beach_ball(size: int = 12) -> Image.Image:
     return im
 
 
-def outline(im: Image.Image) -> Image.Image:
+def outline(im: Image.Image, crop: bool = True) -> Image.Image:
     out = im.copy()
     w, h = im.size
     dark = rgba(PALETTE["K"])
@@ -517,7 +561,7 @@ def outline(im: Image.Image) -> Image.Image:
                 if 0 <= nx < w and 0 <= ny < h and im.getpixel((nx, ny))[3] == 255:
                     out.putpixel((x, y), dark)
                     break
-    return out.crop(out.getbbox())
+    return out.crop(out.getbbox()) if crop else out
 
 
 def shift_hue(
@@ -578,6 +622,7 @@ def main() -> None:
         im = im.crop(im.getbbox())
         im.save(DECOR / f"{name}.png")
     outline(beach_ball()).save(DECOR / "beach-ball.png")
+    cat_sit_frames()
     for metal, (light, mid, dark) in METALS.items():
         pal = {**PALETTE, "1": light, "2": mid, "3": dark}
         draw(TROPHY, pal).save(DECOR / f"trophy-{metal}.png")

@@ -20,6 +20,8 @@
 	import { STAGE_NAMES, STAGE_THRESHOLDS, MAX_STAGE, type RoomMood } from '$lib/room/room-stage';
 	import { haptic } from '$lib/utils/helpers';
 	import characterUrl from '$lib/assets/room/character.png';
+	import catSitA from '$lib/assets/room/decor/cat-sit-a.png';
+	import catSitB from '$lib/assets/room/decor/cat-sit-b.png';
 
 	let {
 		ctx,
@@ -69,6 +71,8 @@
 		x: number;
 		y: number;
 		styleable?: boolean;
+		/** Show under the piece (animals: keeps the heart above them visible). */
+		below?: boolean;
 	}
 	let selected = $state<Tip | null>(null);
 	let hideTimer: ReturnType<typeof setTimeout> | undefined;
@@ -101,7 +105,29 @@
 			return;
 		}
 		const styleable = !!kind.variants && !!onstyle;
+		if (ANIMALS.has(item.kindId)) {
+			// Keep the label clear of the heart floating up: under the animal, or (near the
+			// bottom of the room, where it would be clipped) above with a gap.
+			const fitsBelow = item.y + item.h + 1.1 < ROOM_GRID.rows;
+			const y = fitsBelow ? item.y + item.h + 0.1 : item.y - 0.75;
+			show({ id: item.id, title: kind.label, detail: rewardOf(item), x: at.x, y, below: fitsBelow });
+			pet(item.id);
+			return;
+		}
 		show({ id: item.id, title: kind.label, detail: rewardOf(item), styleable, ...at }, styleable ? 4000 : 2800);
+	}
+
+	// ---- Animals ----
+	const ANIMALS = new Set(['pet', 'cat']);
+	// They rest at night and when the room is sleepy.
+	const animalsAsleep = $derived(mood.period === 'night' || mood.sleepy);
+	// Tapping an animal makes it hop and float a heart.
+	let petted = $state<{ id: string; n: number } | null>(null);
+	let petTimer: ReturnType<typeof setTimeout> | undefined;
+	function pet(id: string) {
+		clearTimeout(petTimer);
+		petted = { id, n: (petted?.n ?? 0) + 1 };
+		petTimer = setTimeout(() => (petted = null), 900);
 	}
 
 	function openStyle() {
@@ -178,7 +204,8 @@
 				type="button"
 				class="lofi-item"
 				class:lofi-fresh={fresh.has(item.id)}
-				class:lofi-pet={item.kindId === 'pet' || item.kindId === 'cat'}
+				class:lofi-animal={ANIMALS.has(item.kindId)}
+				class:lofi-petted={petted?.id === item.id}
 				class:lofi-selected={selected?.id === item.id}
 				data-test={`lofi-item-${item.id}`}
 				style:left={pctX(item.x)}
@@ -187,7 +214,31 @@
 				onclick={() => select(item, false)}
 				aria-label={item.alt}
 			>
-				<img src={isNight ? (kindOf(item.kindId).nightSprite ?? item.src) : item.src} alt="" draggable="false" />
+				{#if item.kindId === 'pet'}
+					<!-- Wanders across the rug and back; the face turns toward where it's going. -->
+					<span class="lofi-wander" class:lofi-rest={animalsAsleep}>
+						<span class="lofi-face">
+							<img class="lofi-breathe" src={item.src} alt="" draggable="false" />
+						</span>
+						{#if petted?.id === item.id}
+							{#key petted.n}<span class="lofi-heart" aria-hidden="true">♥</span>{/key}
+						{/if}
+					</span>
+				{:else if item.kindId === 'cat'}
+					<!-- Naps, then sits up for a while and swishes its tail. -->
+					<span class="lofi-cat" class:lofi-rest={animalsAsleep}>
+						<img class="lofi-cat-nap lofi-breathe" src={item.src} alt="" draggable="false" />
+						<span class="lofi-cat-sit" aria-hidden="true">
+							<img src={catSitA} alt="" draggable="false" />
+							<img class="lofi-cat-tail" src={catSitB} alt="" draggable="false" />
+						</span>
+						{#if petted?.id === item.id}
+							{#key petted.n}<span class="lofi-heart" aria-hidden="true">♥</span>{/key}
+						{/if}
+					</span>
+				{:else}
+					<img src={isNight ? (kindOf(item.kindId).nightSprite ?? item.src) : item.src} alt="" draggable="false" />
+				{/if}
 			</button>
 		{/each}
 
@@ -274,9 +325,9 @@
 		{#if selected}
 			<div
 				class="lofi-tip"
-				class:lofi-tip-below={selected.y < 2}
+				class:lofi-tip-below={selected.below || selected.y < 2}
 				style:left="clamp(18%, {pctX(selected.x)}, 82%)"
-				style:top={selected.y < 2 ? pctY(selected.y + 1.6) : pctY(selected.y)}
+				style:top={selected.below ? pctY(selected.y) : selected.y < 2 ? pctY(selected.y + 1.6) : pctY(selected.y)}
 				class:lofi-tip-interactive={selected.styleable}
 				role="status"
 			>
@@ -370,9 +421,196 @@
 			transform: none;
 		}
 	}
-	.lofi-pet img {
+	/* ---- Animals ---- */
+	/* The hit area travels with the wandering animal, not its home spot. */
+	.lofi-animal {
+		pointer-events: none;
+	}
+	.lofi-animal > span {
+		pointer-events: auto;
+	}
+	.lofi-wander,
+	.lofi-face,
+	.lofi-cat {
+		position: relative;
+		display: block;
+	}
+	.lofi-item img.lofi-breathe {
 		animation: lofi-breathe 2.4s steps(2, end) infinite;
 		transform-origin: 50% 100%;
+	}
+	/* Pig: 26s loop — idle, walk right ~1 tile, sniff, walk back, idle. */
+	.lofi-wander {
+		animation: lofi-wander 26s linear infinite;
+	}
+	@keyframes lofi-wander {
+		0%,
+		18% {
+			transform: none;
+		}
+		34%,
+		58% {
+			transform: translateX(110%);
+		}
+		74%,
+		100% {
+			transform: none;
+		}
+	}
+	.lofi-face {
+		transform-origin: 50% 100%;
+		animation: lofi-face 26s linear infinite;
+	}
+	/* The sprite faces left: flip while heading right; bob on every step. */
+	@keyframes lofi-face {
+		0%,
+		17.9% {
+			transform: none;
+		}
+		18%,
+		22%,
+		26%,
+		30%,
+		34% {
+			transform: scaleX(-1);
+		}
+		20%,
+		24%,
+		28%,
+		32% {
+			transform: scaleX(-1) translateY(-7%);
+		}
+		44% {
+			transform: scaleX(-1);
+		}
+		46% {
+			transform: scaleX(-1) rotate(-6deg);
+		}
+		48%,
+		57.9% {
+			transform: scaleX(-1);
+		}
+		58%,
+		62%,
+		66%,
+		70%,
+		74%,
+		100% {
+			transform: none;
+		}
+		60%,
+		64%,
+		68%,
+		72% {
+			transform: translateY(-7%);
+		}
+	}
+	/* Cat: 30s loop — naps, then sits up from ~55% to ~95%. */
+	.lofi-cat-nap {
+		animation:
+			lofi-breathe 2.4s steps(2, end) infinite,
+			lofi-cat-nap 30s infinite;
+	}
+	.lofi-cat-sit {
+		position: absolute;
+		bottom: 0;
+		/* sit frames are 14px wide vs the 17px nap sprite: same pixel scale, centred */
+		left: 8.8%;
+		width: 82.35%;
+		opacity: 0;
+		animation: lofi-cat-sit 30s infinite;
+	}
+	.lofi-cat-sit img {
+		display: block;
+		width: 100%;
+	}
+	.lofi-cat-sit img.lofi-cat-tail {
+		position: absolute;
+		inset: 0;
+		animation: lofi-tail 1.4s steps(1, end) infinite;
+	}
+	@keyframes lofi-cat-nap {
+		0%,
+		54% {
+			opacity: 1;
+		}
+		55%,
+		95% {
+			opacity: 0;
+		}
+		96%,
+		100% {
+			opacity: 1;
+		}
+	}
+	@keyframes lofi-cat-sit {
+		0%,
+		54% {
+			opacity: 0;
+		}
+		55%,
+		95% {
+			opacity: 1;
+		}
+		96%,
+		100% {
+			opacity: 0;
+		}
+	}
+	@keyframes lofi-tail {
+		0% {
+			opacity: 0;
+		}
+		50% {
+			opacity: 1;
+		}
+	}
+	/* Night or a sleepy room: everyone settles down and breathes slowly. */
+	.lofi-rest,
+	.lofi-rest .lofi-face {
+		animation: none;
+	}
+	.lofi-rest .lofi-cat-sit {
+		display: none;
+	}
+	.lofi-item .lofi-rest img.lofi-breathe {
+		animation: lofi-breathe 4s steps(2, end) infinite;
+		opacity: 1;
+	}
+	/* Tapped: a hop and a heart. */
+	.lofi-petted > span {
+		animation-play-state: paused;
+	}
+	.lofi-petted {
+		animation: lofi-hop 0.5s cubic-bezier(0.3, 0, 0.2, 1);
+	}
+	@keyframes lofi-hop {
+		40% {
+			transform: translateY(-22%);
+		}
+		100% {
+			transform: none;
+		}
+	}
+	.lofi-heart {
+		position: absolute;
+		left: 50%;
+		top: -10%;
+		color: #ff6b8b;
+		font: 700 1.15rem/1 ui-monospace, monospace;
+		text-shadow: 0 1px 0 #7a1f3a;
+		pointer-events: none;
+		animation: lofi-heart 0.9s ease-out forwards;
+	}
+	@keyframes lofi-heart {
+		from {
+			transform: translate(-50%, 0) scale(0.6);
+			opacity: 1;
+		}
+		to {
+			transform: translate(-50%, -140%) scale(1.15);
+			opacity: 0;
+		}
 	}
 	@keyframes lofi-breathe {
 		50% {
