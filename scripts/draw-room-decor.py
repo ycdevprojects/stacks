@@ -264,6 +264,73 @@ SPRITES = {
         ".rOOOOrOOOOOr.",
         "..rrrrrrrrrr..",
     ],
+    "snow-globe": [
+        "....iiii....",
+        "..iiWiiiii..",
+        ".iiiiiiWiii.",
+        ".iWiihhiiii.",
+        "iiiihllhiWii",
+        "iiihllllhiii",
+        "iWiiiDDiiiii",
+        ".iWWWWWWWWi.",
+        "..iWWWWWWi..",
+        ".DDDDDDDDDD.",
+        ".MMMMMMMMMM.",
+        ".EEEEEEEEEE.",
+    ],
+    "heart-balloon": [
+        ".kk...kk.",
+        "kWkk.kkkk",
+        "kWkkkkkkP",
+        "kkkkkkkkP",
+        ".kkkkkkP.",
+        "..kkkkP..",
+        "...kkP...",
+        "....k....",
+        "....Q....",
+        ".....Q...",
+        ".....Q...",
+        "....Q....",
+        "....Q....",
+        ".....Q...",
+        ".....Q...",
+        "...DDD...",
+        "...EEE...",
+    ],
+    "tulips": [
+        ".kk..pp...",
+        ".kk.ppp.kk",
+        ".kk..pp.kk",
+        "..h..h..h.",
+        "..h.lh.hh.",
+        "..hl.h.h..",
+        "...hhhh...",
+        "..TTTTTT..",
+        ".tttttttt.",
+        "..tttttt..",
+        "..tttttt..",
+        "...TTTT...",
+    ],
+    "sunflower": [
+        "...jjjj...",
+        "..jjnnjj..",
+        ".jjnEEnjj.",
+        ".jnEEEEnj.",
+        ".jnEEEEnj.",
+        ".jjnEEnjj.",
+        "..jjnnjj..",
+        "...jjjj...",
+        "....h.....",
+        "....hl....",
+        "...lh.....",
+        "..llh.....",
+        "....hll...",
+        "....h.....",
+        "..OOOOOO..",
+        "..yyyyyy..",
+        "...OOOO...",
+        "...rrrr...",
+    ],
     "trophy-shelf": [
         "L" * 40,
         "M" * 40,
@@ -292,7 +359,7 @@ METALS = {
 }
 
 # Sprites that get a 1px dark outline, like the Kenney pet and crate.
-OUTLINED = {"cat", "pumpkin", "beanbag"}
+OUTLINED = {"cat", "pumpkin", "beanbag", "beach-ball"}
 
 
 def rgba(hex_color: str) -> tuple[int, int, int, int]:
@@ -310,6 +377,31 @@ def draw(rows: list[str], palette: dict[str, str]) -> Image.Image:
         for x, ch in enumerate(row):
             if ch != ".":
                 im.putpixel((x, y), rgba(palette[ch]))
+    return im
+
+
+def beach_ball(size: int = 12) -> Image.Image:
+    """A beach ball: a disc split into six coloured wedges around a white cap."""
+    import math
+
+    wedges = ["k", "W", "I", "W", "j", "W"]
+    im = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    c = (size - 1) / 2
+    for y in range(size):
+        for x in range(size):
+            dx, dy = x - c, y - c
+            r = math.hypot(dx, dy)
+            if r > size / 2 - 0.2:
+                continue
+            if r < 1.6:
+                ch = "W"
+            else:
+                ch = wedges[int(((math.atan2(dy, dx) + math.pi) / (2 * math.pi)) * 6) % 6]
+            # soft shading on the lower right
+            col = rgba(PALETTE[ch])
+            if dx + dy > size * 0.45:
+                col = tuple(int(v * 0.85) for v in col[:3]) + (255,)
+            im.putpixel((x, y), col)
     return im
 
 
@@ -367,6 +459,7 @@ def main() -> None:
             im = outline(im)
         im = im.crop(im.getbbox())
         im.save(DECOR / f"{name}.png")
+    outline(beach_ball()).save(DECOR / "beach-ball.png")
     for metal, (light, mid, dark) in METALS.items():
         pal = {**PALETTE, "1": light, "2": mid, "3": dark}
         draw(TROPHY, pal).save(DECOR / f"trophy-{metal}.png")

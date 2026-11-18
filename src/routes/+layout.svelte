@@ -8,6 +8,7 @@
 	import { upcomingReminders, scheduleReminders, setAppBadge, onRemindersChange } from '$lib/services/reminders';
 	import { dueHabits } from '$lib/utils/schedule';
 	import { registerServiceWorker } from '$lib/services/pwa';
+	import { isNative } from '$lib/services/native';
 	import { haptic } from '$lib/utils/helpers';
 	import Toast from '$lib/components/Toast.svelte';
 	import Icon, { type IconName } from '$lib/components/Icon.svelte';
@@ -24,7 +25,8 @@
 				status = 'error';
 			});
 
-		if (!dev) registerServiceWorker();
+		// The apps ship their files on the device; only the hosted web app needs the offline cache.
+		if (!dev && !isNative()) registerServiceWorker();
 
 		// Keep "today" correct when the app resumes after midnight.
 		const onresume = () => document.visibilityState === 'visible' && refreshToday();

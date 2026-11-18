@@ -1,3 +1,5 @@
+import { isNative, nativeHaptic } from '$lib/services/native';
+
 // Date, color, id and device utilities.
 
 function toDateStr(d: Date): string {
@@ -100,8 +102,12 @@ export function generateId(): string {
 	return crypto.randomUUID();
 }
 
-/** Short vibration where supported (Android); silently ignored elsewhere. */
+/** Short tap: native haptics in the app, vibration in Android browsers, nothing elsewhere. */
 export function haptic(pattern: number | number[] = 10): void {
+	if (isNative()) {
+		nativeHaptic(pattern);
+		return;
+	}
 	try {
 		navigator.vibrate?.(pattern);
 	} catch {

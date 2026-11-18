@@ -147,12 +147,13 @@ describe('rewards beyond the stages', () => {
 		expect(ids(100)).toHaveLength(4);
 	});
 
-	it('shows seasonal pieces only in their months, never together', () => {
+	it('has exactly one seasonal visitor every month', () => {
+		const seasonalIds = new Set(ROOM_PLACEMENTS.filter((p) => p.months).map((p) => p.id));
 		const seasonal = (month: number) =>
 			visibleItems({ ...ctx, month })
 				.map((i) => i.id)
-				.filter((id) => id === 'pumpkin' || id === 'pine');
-		expect(seasonal(5)).toEqual([]);
+				.filter((id) => seasonalIds.has(id));
+		for (let month = 0; month < 12; month++) expect(seasonal(month), `month ${month}`).toHaveLength(1);
 		expect(seasonal(9)).toEqual(['pumpkin']);
 		expect(seasonal(11)).toEqual(['pine']);
 	});
@@ -164,7 +165,7 @@ describe('rewards beyond the stages', () => {
 	});
 
 	it('validates every combination of seasonal + full decor against the engine', () => {
-		for (const month of [0, 9, 11]) {
+		for (let month = 0; month < 12; month++) {
 			const all = ROOM_PLACEMENTS.filter((p) => isVisible(p, { stage: 6, level: 99, bestStreak: 999, month }));
 			expect(validatePlacements(all), `month ${month}`).toEqual([]);
 		}

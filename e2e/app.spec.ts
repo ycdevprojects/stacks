@@ -204,3 +204,22 @@ test('a finished room keeps rewarding: decor, trophies and styles', async ({ pag
 	// the next unpicked piece follows
 	await expect(page.getByRole('dialog', { name: /Style your/ })).toBeVisible();
 });
+
+test('tapping a room piece offers its styles', async ({ page }) => {
+	await seedFinishedRoom(page);
+	await page.getByTestId('lofi-item-rug').click({ position: { x: 12, y: 12 } }); // a corner, clear of the pets
+	await page.getByTestId('change-style').click();
+	const sheet = page.getByRole('dialog', { name: 'Style your woven rug' });
+	await expect(sheet).toBeVisible();
+	const lake = sheet.getByRole('button', { name: /Lake/ });
+	await lake.click();
+	await expect(sheet).toBeHidden();
+	// picked from a single piece: no follow-up sheet
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await page.getByTestId('lofi-item-rug').click({ position: { x: 12, y: 12 } }); // a corner, clear of the pets
+	await page.getByTestId('change-style').click();
+	await expect(page.getByRole('dialog', { name: 'Style your woven rug' }).getByRole('button', { name: /Lake/ })).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
+});

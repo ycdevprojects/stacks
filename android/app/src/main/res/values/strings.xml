@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Stackr</string>
+    <string name="title_activity_main">Stackr</string>
+    <string name="package_name">com.ycdevprojects.stackr</string>
+    <string name="custom_url_scheme">com.ycdevprojects.stackr</string>
+</resources>
