@@ -25,46 +25,49 @@ export function xpProgressInLevel(xp: number): { current: number; needed: number
 	return { current, needed, percent: Math.min(100, Math.round((current / needed) * 100)) };
 }
 
-const DAY_MS = 86_400_000;
-
-/** Parse YYYY-MM-DD as a local date (not UTC) to avoid timezone shifts. */
-function parseLocal(dateStr: string): Date {
-	const [y, m, d] = dateStr.slice(0, 10).split('-').map(Number);
-	return new Date(y, m - 1, d);
-}
-
-function dayDiff(later: Date, earlier: Date): number {
-	return Math.round((later.getTime() - earlier.getTime()) / DAY_MS);
-}
+import { addDays, today as todayStr } from './helpers';
 
 /**
- * Current run of consecutive days with at least one completion. A streak stays
- * alive through today if the most recent completion was yesterday.
+ * A day that neither extends nor breaks a streak: a rest day, or a day the
+ * habit isn't scheduled. Streak functions skip over excused days.
  */
-export function calculateStreak(completedDates: string[]): number {
-	if (completedDates.length === 0) return 0;
-	const now = new Date();
-	const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-	const sorted = [...new Set(completedDates.map((d) => d.slice(0, 10)))].sort().reverse();
+export type ExcuseFn = (date: string) => boolean;
 
-	if (dayDiff(today, parseLocal(sorted[0])) > 1) return 0;
+const never: ExcuseFn = () => false;
 
-	let streak = 1;
-	for (let i = 1; i < sorted.length; i++) {
-		if (dayDiff(parseLocal(sorted[i - 1]), parseLocal(sorted[i])) !== 1) break;
-		streak++;
+/**
+ * Current run of days with at least one completion, walking back from today.
+ * Excused days are skipped. The streak stays alive through today if the last
+ * counted day was yesterday (or an excused day before it).
+ */
+export function calculateStreak(completedDates: string[], isExcused: ExcuseFn = never, today: string = todayStr()): number {
+	const done = new Set(completedDates.map((d) => d.slice(0, 10)));
+	if (done.size === 0) return 0;
+	const earliest = [...done].reduce((min, d) => (d < min ? d : min));
+	let streak = 0;
+	// Today never breaks the streak: it isn't over yet.
+	let day = today;
+	if (done.has(day)) streak++;
+	day = addDays(day, -1);
+	while (day >= earliest) {
+		if (done.has(day)) streak++;
+		else if (!isExcused(day)) break;
+		day = addDays(day, -1);
 	}
 	return streak;
 }
 
-/** Longest run of consecutive days ever, regardless of whether it is still alive. */
-export function longestStreak(completedDates: string[]): number {
+/** Longest run ever (excused days skipped), whether or not it is still alive. */
+export function longestStreak(completedDates: string[], isExcused: ExcuseFn = never): number {
 	const sorted = [...new Set(completedDates.map((d) => d.slice(0, 10)))].sort();
+	if (sorted.length === 0) return 0;
+	const done = new Set(sorted);
+	const last = sorted[sorted.length - 1];
 	let best = 0;
 	let run = 0;
-	for (let i = 0; i < sorted.length; i++) {
-		run = i > 0 && dayDiff(parseLocal(sorted[i]), parseLocal(sorted[i - 1])) === 1 ? run + 1 : 1;
-		best = Math.max(best, run);
+	for (let day = sorted[0]; day <= last; day = addDays(day, 1)) {
+		if (done.has(day)) best = Math.max(best, ++run);
+		else if (!isExcused(day)) run = 0;
 	}
 	return best;
 }

@@ -23,9 +23,37 @@ import bookshelfImg from '$lib/assets/room/bookshelf.png';
 import shelfEmptyImg from '$lib/assets/room/shelf-empty.png';
 import speakerImg from '$lib/assets/room/speaker.png';
 import petImg from '$lib/assets/room/pet.png';
+// Original decor drawn by scripts/draw-room-decor.py.
+import mugImg from '$lib/assets/room/decor/mug.png';
+import catImg from '$lib/assets/room/decor/cat.png';
+import clockImg from '$lib/assets/room/decor/clock.png';
+import beanbagImg from '$lib/assets/room/decor/beanbag.png';
+import tableLampImg from '$lib/assets/room/decor/table-lamp.png';
+import guitarImg from '$lib/assets/room/decor/guitar.png';
+import laptopImg from '$lib/assets/room/decor/laptop.png';
+import hangingPlantImg from '$lib/assets/room/decor/hanging-plant.png';
+import floorLampImg from '$lib/assets/room/decor/floor-lamp.png';
+import booksImg from '$lib/assets/room/decor/books.png';
+import cactusImg from '$lib/assets/room/decor/cactus.png';
+import recordPlayerImg from '$lib/assets/room/decor/record-player.png';
+import pumpkinImg from '$lib/assets/room/decor/pumpkin.png';
+import pineImg from '$lib/assets/room/decor/pine.png';
+import trophyShelfImg from '$lib/assets/room/decor/trophy-shelf.png';
+import trophyBronzeImg from '$lib/assets/room/decor/trophy-bronze.png';
+import trophySilverImg from '$lib/assets/room/decor/trophy-silver.png';
+import trophyGoldImg from '$lib/assets/room/decor/trophy-gold.png';
+// Style variants (recolours, same script).
+import rugBlueImg from '$lib/assets/room/variants/rug-blue.png';
+import rugRoseImg from '$lib/assets/room/variants/rug-rose.png';
+import bedBlueImg from '$lib/assets/room/variants/bed-blue.png';
+import bedGreenImg from '$lib/assets/room/variants/bed-green.png';
+import bagBlueImg from '$lib/assets/room/variants/sleeping-bag-blue.png';
+import bagRedImg from '$lib/assets/room/variants/sleeping-bag-red.png';
+import posterTealImg from '$lib/assets/room/variants/poster-teal.png';
+import posterRoseImg from '$lib/assets/room/variants/poster-rose.png';
 
 /** Loose buckets ("furniture", "plants") used by placement rules and labels. */
-export type ItemCategory = 'wall-art' | 'furniture' | 'rug' | 'plant' | 'pet' | 'tech' | 'light';
+export type ItemCategory = 'wall-art' | 'furniture' | 'rug' | 'plant' | 'pet' | 'tech' | 'light' | 'decor';
 
 /**
  * Where a kind is allowed to sit:
@@ -49,6 +77,15 @@ export interface StackRule {
 	mode: 'top-edge' | 'front' | 'inside';
 }
 
+/** An alternative look for a kind; same pixel size as the default sprite. */
+export interface ItemVariant {
+	id: string;
+	label: string;
+	sprite: string;
+	/** CSS color for the picker swatch. */
+	swatch: string;
+}
+
 export interface ItemKind {
 	id: string;
 	/** Human name — shown when the item is tapped in the room. */
@@ -64,6 +101,11 @@ export interface ItemKind {
 	walkable?: boolean;
 	/** Required for zone `on-surface`: the surfaces this kind may rest on. */
 	stacksOn?: StackRule[];
+	/**
+	 * Optional looks the player can pick. The first entry is the default and
+	 * uses `sprite`; the rest carry their own recoloured sprite.
+	 */
+	variants?: ItemVariant[];
 	alt: string;
 }
 
@@ -86,6 +128,11 @@ export const ITEM_KINDS = {
 		footprintW: 0.7,
 		zone: 'wall',
 		category: 'wall-art',
+		variants: [
+			{ id: 'amber', label: 'Amber', sprite: posterImg, swatch: '#df9131' },
+			{ id: 'teal', label: 'Teal', sprite: posterTealImg, swatch: '#3f8f93' },
+			{ id: 'rose', label: 'Rose', sprite: posterRoseImg, swatch: '#c25a6a' }
+		],
 		alt: 'Framed poster on the wall'
 	},
 	'shelf-media': {
@@ -164,7 +211,12 @@ export const ITEM_KINDS = {
 		footprintW: 1.7,
 		zone: 'floor',
 		category: 'furniture',
-		alt: 'Proper bed with an orange blanket against the wall'
+		variants: [
+			{ id: 'orange', label: 'Orange', sprite: bedImg, swatch: '#c66527' },
+			{ id: 'blue', label: 'Blue', sprite: bedBlueImg, swatch: '#3f6fb0' },
+			{ id: 'green', label: 'Green', sprite: bedGreenImg, swatch: '#4f8a55' }
+		],
+		alt: 'Proper bed with a cozy blanket against the wall'
 	},
 	nightstand: {
 		id: 'nightstand',
@@ -184,7 +236,12 @@ export const ITEM_KINDS = {
 		footprintW: 1.9,
 		zone: 'floor',
 		category: 'furniture',
-		alt: 'Green sleeping bag rolled out on the floor'
+		variants: [
+			{ id: 'green', label: 'Green', sprite: sleepingBagImg, swatch: '#4ba86d' },
+			{ id: 'blue', label: 'Blue', sprite: bagBlueImg, swatch: '#4b7ba8' },
+			{ id: 'red', label: 'Red', sprite: bagRedImg, swatch: '#a8524b' }
+		],
+		alt: 'Sleeping bag rolled out on the floor'
 	},
 	plant: {
 		id: 'plant',
@@ -225,6 +282,11 @@ export const ITEM_KINDS = {
 		zone: 'floor',
 		category: 'rug',
 		walkable: true,
+		variants: [
+			{ id: 'green', label: 'Moss', sprite: rugImg, swatch: '#5fae6e' },
+			{ id: 'blue', label: 'Lake', sprite: rugBlueImg, swatch: '#5f86ae' },
+			{ id: 'rose', label: 'Rose', sprite: rugRoseImg, swatch: '#b9677f' }
+		],
 		alt: 'Large woven rug covering a third of the floor'
 	},
 	pet: {
@@ -242,6 +304,199 @@ export const ITEM_KINDS = {
 		 */
 		stacksOn: [{ target: 'rug', mode: 'inside' }],
 		alt: 'Pet pig napping on the rug'
+	},
+
+	// ---- Level decor (one per level after the room is complete) ----
+	mug: {
+		id: 'mug',
+		label: 'Coffee mug',
+		sprite: mugImg,
+		spritePx: { w: 10, h: 10 },
+		footprintW: 0.42,
+		zone: 'on-surface',
+		category: 'decor',
+		stacksOn: [{ target: 'desk', mode: 'top-edge' }],
+		alt: 'Steaming mug on the desk'
+	},
+	cat: {
+		id: 'cat',
+		label: 'Cat',
+		sprite: catImg,
+		spritePx: { w: 17, h: 13 },
+		footprintW: 1,
+		zone: 'floor',
+		category: 'pet',
+		stacksOn: [{ target: 'rug', mode: 'inside' }],
+		alt: 'Grey cat curled up asleep on the rug'
+	},
+	clock: {
+		id: 'clock',
+		label: 'Wall clock',
+		sprite: clockImg,
+		spritePx: { w: 12, h: 12 },
+		footprintW: 0.6,
+		zone: 'wall',
+		category: 'decor',
+		alt: 'Round wall clock'
+	},
+	beanbag: {
+		id: 'beanbag',
+		label: 'Beanbag',
+		sprite: beanbagImg,
+		spritePx: { w: 18, h: 14 },
+		footprintW: 1.25,
+		zone: 'floor',
+		category: 'furniture',
+		alt: 'Squishy purple beanbag'
+	},
+	'table-lamp': {
+		id: 'table-lamp',
+		label: 'Bedside lamp',
+		sprite: tableLampImg,
+		spritePx: { w: 10, h: 12 },
+		footprintW: 0.5,
+		zone: 'on-surface',
+		category: 'light',
+		stacksOn: [{ target: 'nightstand', mode: 'top-edge' }],
+		alt: 'Little lamp on the nightstand'
+	},
+	guitar: {
+		id: 'guitar',
+		label: 'Guitar',
+		sprite: guitarImg,
+		spritePx: { w: 8, h: 18 },
+		footprintW: 0.5,
+		zone: 'floor',
+		category: 'decor',
+		alt: 'Acoustic guitar leaning by the wall'
+	},
+	laptop: {
+		id: 'laptop',
+		label: 'Laptop',
+		sprite: laptopImg,
+		spritePx: { w: 14, h: 9 },
+		footprintW: 0.85,
+		zone: 'on-surface',
+		category: 'tech',
+		stacksOn: [{ target: 'desk', mode: 'top-edge' }],
+		alt: 'Open laptop on the desk'
+	},
+	'hanging-plant': {
+		id: 'hanging-plant',
+		label: 'Hanging plant',
+		sprite: hangingPlantImg,
+		spritePx: { w: 12, h: 14 },
+		footprintW: 0.6,
+		zone: 'wall',
+		category: 'plant',
+		alt: 'Trailing plant in a hanging pot'
+	},
+	'floor-lamp': {
+		id: 'floor-lamp',
+		label: 'Floor lamp',
+		sprite: floorLampImg,
+		spritePx: { w: 8, h: 25 },
+		footprintW: 0.45,
+		zone: 'floor',
+		category: 'light',
+		alt: 'Tall floor lamp'
+	},
+	books: {
+		id: 'books',
+		label: 'Book pile',
+		sprite: booksImg,
+		spritePx: { w: 12, h: 10 },
+		footprintW: 0.7,
+		zone: 'floor',
+		category: 'decor',
+		alt: 'A wobbly pile of books'
+	},
+	cactus: {
+		id: 'cactus',
+		label: 'Cactus',
+		sprite: cactusImg,
+		spritePx: { w: 10, h: 14 },
+		footprintW: 0.6,
+		zone: 'floor',
+		category: 'plant',
+		alt: 'Small cactus in a terracotta pot'
+	},
+	'record-player': {
+		id: 'record-player',
+		label: 'Record player',
+		sprite: recordPlayerImg,
+		spritePx: { w: 14, h: 9 },
+		footprintW: 0.9,
+		zone: 'floor',
+		category: 'tech',
+		alt: 'Record player with a spinning vinyl'
+	},
+
+	// ---- Seasonal ----
+	pumpkin: {
+		id: 'pumpkin',
+		label: 'Pumpkin',
+		sprite: pumpkinImg,
+		spritePx: { w: 14, h: 10 },
+		footprintW: 0.8,
+		zone: 'floor',
+		category: 'decor',
+		alt: 'Autumn pumpkin'
+	},
+	pine: {
+		id: 'pine',
+		label: 'Little tree',
+		sprite: pineImg,
+		spritePx: { w: 13, h: 18 },
+		footprintW: 0.95,
+		zone: 'floor',
+		category: 'plant',
+		alt: 'Little pine tree with fairy lights'
+	},
+
+	// ---- Streak trophies ----
+	'trophy-shelf': {
+		id: 'trophy-shelf',
+		label: 'Trophy shelf',
+		sprite: trophyShelfImg,
+		spritePx: { w: 40, h: 4 },
+		footprintW: 1.3,
+		zone: 'wall',
+		category: 'furniture',
+		alt: 'Wall shelf for streak trophies'
+	},
+	'trophy-bronze': {
+		id: 'trophy-bronze',
+		label: 'Bronze trophy',
+		sprite: trophyBronzeImg,
+		spritePx: { w: 8, h: 10 },
+		footprintW: 0.32,
+		zone: 'on-surface',
+		category: 'decor',
+		stacksOn: [{ target: 'trophy-shelf', mode: 'top-edge' }],
+		alt: 'Bronze trophy for a 7-day streak'
+	},
+	'trophy-silver': {
+		id: 'trophy-silver',
+		label: 'Silver trophy',
+		sprite: trophySilverImg,
+		spritePx: { w: 8, h: 10 },
+		footprintW: 0.32,
+		zone: 'on-surface',
+		category: 'decor',
+		stacksOn: [{ target: 'trophy-shelf', mode: 'top-edge' }],
+		alt: 'Silver trophy for a 30-day streak'
+	},
+	'trophy-gold': {
+		id: 'trophy-gold',
+		label: 'Gold trophy',
+		sprite: trophyGoldImg,
+		spritePx: { w: 8, h: 10 },
+		footprintW: 0.32,
+		zone: 'on-surface',
+		category: 'decor',
+		stacksOn: [{ target: 'trophy-shelf', mode: 'top-edge' }],
+		alt: 'Gold trophy for a 100-day streak'
 	}
 } as const satisfies Record<string, ItemKind>;
 
@@ -254,6 +509,11 @@ export function kindOf(id: string): ItemKind {
 
 /** Every kind, in catalog declaration order. */
 export const KIND_LIST: readonly ItemKind[] = Object.values(ITEM_KINDS as Record<string, ItemKind>);
+
+/** Sprite for a kind in the chosen style (falls back to the default). */
+export function spriteFor(kind: ItemKind, variantId: string | undefined): string {
+	return kind.variants?.find((v) => v.id === variantId)?.sprite ?? kind.sprite;
+}
 
 /** Rendered / footprint height of a kind: width scaled by the native sprite aspect. */
 export function footprintH(kind: ItemKind): number {

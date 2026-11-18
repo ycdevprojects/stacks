@@ -6,7 +6,7 @@
 
 declare const self: ServiceWorkerGlobalScope;
 
-const CACHE = 'stackr-v2';
+const CACHE = 'stackr-v3';
 
 const SHELL = ['/', '/stacks', '/stats', '/room'];
 
@@ -69,6 +69,19 @@ self.addEventListener('fetch', (event) => {
 				return response;
 			})
 			.catch(() => caches.match(request) as Promise<Response>)
+	);
+});
+
+// Reminder tapped: focus an open Stackr window, or open one.
+self.addEventListener('notificationclick', (event) => {
+	event.notification.close();
+	const url = (event.notification.data as { url?: string } | null)?.url ?? '/';
+	event.waitUntil(
+		self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+			const open = clients.find((c) => new URL(c.url).origin === self.location.origin);
+			if (open) return open.focus().then(() => open.navigate(url)).then(() => undefined);
+			return self.clients.openWindow(url).then(() => undefined);
+		})
 	);
 });
 

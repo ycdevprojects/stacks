@@ -6,8 +6,9 @@
 	let {
 		selected = $bindable(),
 		today,
-		ratio
-	}: { selected: string; today: string; ratio: (date: string) => number } = $props();
+		ratio,
+		rest = () => false
+	}: { selected: string; today: string; ratio: (date: string) => number; rest?: (date: string) => boolean } = $props();
 
 	const days = $derived(Array.from({ length: 7 }, (_, i) => addDays(today, i - 6)));
 </script>
@@ -17,6 +18,7 @@
 		{@const d = dateOf(date)}
 		{@const isSel = date === selected}
 		{@const r = ratio(date)}
+		{@const resting = rest(date) && r < 1}
 		<button
 			type="button"
 			role="tab"
@@ -33,7 +35,12 @@
 			<span class="text-[11px] font-medium {date === today ? 'text-indigo-400' : 'text-slate-500'}">
 				{d.toLocaleDateString(undefined, { weekday: 'narrow' })}
 			</span>
-			<ProgressRing value={r} size={34} stroke={3} class={r >= 1 ? 'text-emerald-400' : 'text-indigo-400'}>
+			<ProgressRing
+				value={resting ? 1 : r}
+				size={34}
+				stroke={3}
+				class={r >= 1 ? 'text-emerald-400' : resting ? 'text-sky-400/50' : 'text-indigo-400'}
+			>
 				<span class="text-[13px] font-semibold {isSel ? 'text-white' : 'text-slate-300'}">{d.getDate()}</span>
 			</ProgressRing>
 		</button>

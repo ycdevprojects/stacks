@@ -3,6 +3,7 @@
 	import { calculateStreak, longestStreak, xpProgressInLevel } from '$lib/utils/gamification';
 	import { addDays, dateOf, formatDate } from '$lib/utils/helpers';
 	import { BADGES } from '$lib/utils/badges';
+	import { dueHabits, isScheduled, habitExcuse, overallExcuse } from '$lib/utils/schedule';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import ProgressRing from '$lib/components/ProgressRing.svelte';
 	import SettingsSheet from '$lib/components/SettingsSheet.svelte';
@@ -13,7 +14,7 @@
 
 	const profile = $derived(app.profile);
 	const progress = $derived(xpProgressInLevel(profile?.xp ?? 0));
-	const habitCount = $derived(app.habits.length);
+	const dueOn = (date: string) => dueHabits(app.habits, date).length;
 
 	const countByDate = $derived.by(() => {
 		const m = new Map<string, number>();
@@ -22,14 +23,18 @@
 	});
 
 	const best = $derived(
-		Math.max(profile?.longest_streak ?? 0, longestStreak(app.completions.map((c) => c.completed_at)))
+		Math.max(
+			profile?.longest_streak ?? 0,
+			longestStreak(app.completions.map((c) => c.completed_at), overallExcuse(app.habits, app.restDays))
+		)
 	);
 
 	const week = $derived(
 		Array.from({ length: 7 }, (_, i) => {
 			const date = addDays(app.today, i - 6);
 			const count = countByDate.get(date) ?? 0;
-			return { date, count, ratio: habitCount ? Math.min(1, count / habitCount) : 0 };
+			const due = dueOn(date);
+			return { date, count, ratio: due ? Math.min(1, count / due) : count ? 1 : 0 };
 		})
 	);
 	const weekTotal = $derived(week.reduce((n, d) => n + d.count, 0));
@@ -42,15 +47,15 @@
 			Array.from({ length: 7 }, (_, d) => {
 				const date = addDays(end, -((HEAT_WEEKS - 1 - w) * 7 + (6 - d)));
 				const count = countByDate.get(date) ?? 0;
-				return { date, count, future: date > app.today };
+				const due = dueOn(date);
+				return { date, count, ratio: due ? count / due : count ? 1 : 0, future: date > app.today };
 			})
 		);
 	});
 
-	function heatClass(count: number, future: boolean): string {
+	function heatClass(count: number, r: number, future: boolean): string {
 		if (future) return 'bg-transparent';
-		if (count === 0 || habitCount === 0) return 'bg-slate-800/70';
-		const r = count / habitCount;
+		if (count === 0) return 'bg-slate-800/70';
 		if (r < 0.34) return 'bg-indigo-900';
 		if (r < 0.67) return 'bg-indigo-700';
 		if (r < 1) return 'bg-indigo-500';
@@ -63,13 +68,16 @@
 				const dates = app.completions.filter((c) => c.habit_id === h.id).map((c) => c.completed_at);
 				// Rate window starts when the habit existed (creation or first check-in, whichever is earlier).
 				const created = dates.reduce((min, d) => (d < min ? d : min), h.created_at.slice(0, 10));
-				const window = Array.from({ length: 30 }, (_, i) => addDays(app.today, -i)).filter((d) => d >= created);
+				const window = Array.from({ length: 30 }, (_, i) => addDays(app.today, -i)).filter(
+					(d) => d >= created && isScheduled(h, d) && !app.restDays.includes(d)
+				);
+				const excuse = habitExcuse(h, app.restDays);
 				const rate = window.length ? window.filter((d) => isDone(h.id, d)).length / window.length : 0;
 				return {
 					habit: h,
 					stack: app.stacks.find((s) => s.id === h.stack_id),
-					streak: calculateStreak(dates),
-					best: longestStreak(dates),
+					streak: calculateStreak(dates, excuse),
+					best: longestStreak(dates, excuse),
 					rate
 				};
 			})
@@ -108,7 +116,7 @@
 
 	<div class="mb-6 grid grid-cols-2 gap-3">
 		<div class="card p-4">
-			<p class="text-2xl font-bold text-orange-400 tabular-nums">🔥 {profile.streak_days}</p>
+			<p class="text-2xl font-bold text-orange-400 tabular-nums">🔥 {app.streak}</p>
 			<p class="mt-0.5 text-[13px] text-slate-400">Current streak</p>
 		</div>
 		<div class="card p-4">
@@ -158,7 +166,7 @@
 		{#each heatmap as column, w (w)}
 			{#each column as cell (cell.date)}
 				<div
-					class="aspect-square rounded-[4px] {heatClass(cell.count, cell.future)} {cell.date === app.today ? 'ring-1 ring-white/60' : ''}"
+					class="aspect-square rounded-[4px] {heatClass(cell.count, cell.ratio, cell.future)} {cell.date === app.today ? 'ring-1 ring-white/60' : ''}"
 					title="{formatDate(cell.date, { month: 'short', day: 'numeric' })}: {cell.count}"
 				></div>
 			{/each}
@@ -198,7 +206,7 @@
 			</li>
 		{/each}
 	</ul>
-	<p class="mt-2 px-1 text-[11px] text-slate-600">Completion rate over the last 30 days (or since the habit was added).</p>
+	<p class="mt-2 px-1 text-[11px] text-slate-600">Completion rate over the scheduled days of the last 30, not counting rest days.</p>
 {/if}
 
 <SettingsSheet bind:open={showSettings} />

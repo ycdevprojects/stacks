@@ -8,7 +8,7 @@
 // so swapping a sprite or rebalancing a footprint is a one-line catalog change.
 // The scripted layout below validates itself against the placement engine
 // (placement.ts) in layout.test.ts.
-import { footprintH, kindOf } from './catalog';
+import { footprintH, kindOf, spriteFor } from './catalog';
 import wallTile from '$lib/assets/room/wall.png';
 import wallBaseTile from '$lib/assets/room/wall-base.png';
 import floorTile from '$lib/assets/room/floor.png';
@@ -39,6 +39,12 @@ export interface RoomPlacement {
 	until?: number;
 	/** `'user'` placements (player-placed items) skip the stage gate. */
 	source?: 'user';
+	/** Also requires this profile level (level decor). */
+	level?: number;
+	/** Only shown in these months (0 = January) — seasonal pieces. */
+	months?: number[];
+	/** Also requires a best streak of at least this many days (trophies). */
+	streak?: number;
 }
 
 /**
@@ -66,8 +72,62 @@ export const ROOM_PLACEMENTS: RoomPlacement[] = [
 	{ id: 'plant', kindId: 'plant', x: 0.4, y: 8.5, stage: 3 },
 	{ id: 'plant-right', kindId: 'plant', x: 8.6, y: 8.4, stage: 5 },
 	{ id: 'rug', kindId: 'rug', x: 2, y: 4.75, stage: 4 },
-	{ id: 'pet', kindId: 'pet', x: 4.55, y: 6.85, stage: 5 }
+	{ id: 'pet', kindId: 'pet', x: 4.55, y: 6.85, stage: 5 },
+
+	// Streak trophies on a little wall shelf (best streak 7 / 30 / 100 days).
+	{ id: 'trophy-shelf', kindId: 'trophy-shelf', x: 2.15, y: 0.95, stage: 1, streak: 7 },
+	{ id: 'trophy-bronze', kindId: 'trophy-bronze', x: 2.3, y: 0.58, stage: 1, streak: 7 },
+	{ id: 'trophy-silver', kindId: 'trophy-silver', x: 2.64, y: 0.58, stage: 1, streak: 30 },
+	{ id: 'trophy-gold', kindId: 'trophy-gold', x: 2.98, y: 0.58, stage: 1, streak: 100 },
+
+	// Seasonal: share one corner, never at the same time.
+	{ id: 'pumpkin', kindId: 'pumpkin', x: 1.05, y: 5.95, stage: 1, months: [9, 10] },
+	{ id: 'pine', kindId: 'pine', x: 1.0, y: 5.85, stage: 1, months: [11] },
+
+	// Level decor: one piece per level once the room is complete (see DECOR_ORDER).
+	{ id: 'mug', kindId: 'mug', x: 8.35, y: 1.5, stage: 6, level: 9 },
+	{ id: 'cat', kindId: 'cat', x: 6.6, y: 8.3, stage: 6, level: 10 },
+	{ id: 'clock', kindId: 'clock', x: 8.1, y: 0.2, stage: 6, level: 11 },
+	{ id: 'beanbag', kindId: 'beanbag', x: 3.5, y: 2.9, stage: 6, level: 12 },
+	{ id: 'table-lamp', kindId: 'table-lamp', x: 2.35, y: 1.3, stage: 6, level: 13 },
+	{ id: 'guitar', kindId: 'guitar', x: 9.35, y: 5.8, stage: 6, level: 14 },
+	{ id: 'laptop', kindId: 'laptop', x: 6.5, y: 1.48, stage: 6, level: 15 },
+	{ id: 'hanging-plant', kindId: 'hanging-plant', x: 3.55, y: 0.05, stage: 6, level: 16 },
+	{ id: 'floor-lamp', kindId: 'floor-lamp', x: 5.85, y: 1.6, stage: 6, level: 17 },
+	{ id: 'books', kindId: 'books', x: 0.3, y: 5.2, stage: 6, level: 18 },
+	{ id: 'cactus', kindId: 'cactus', x: 1.0, y: 7.2, stage: 6, level: 19 },
+	{ id: 'record-player', kindId: 'record-player', x: 8.4, y: 7.3, stage: 6, level: 20 }
 ];
+
+/** Level decor in unlock order. */
+export const DECOR_ORDER: RoomPlacement[] = ROOM_PLACEMENTS.filter((p) => p.level !== undefined).sort(
+	(a, b) => (a.level ?? 0) - (b.level ?? 0)
+);
+
+/** What the room is showing: the stage plus the extra gates. */
+export interface RoomContext {
+	stage: number;
+	level: number;
+	/** 0 = January. */
+	month: number;
+	bestStreak: number;
+	/** Chosen style per placement id. */
+	styles?: Record<string, string>;
+}
+
+/** Is a placement revealed in this room context? */
+export function isVisible(
+	p: Pick<RoomPlacement, 'stage' | 'until' | 'source' | 'level' | 'months' | 'streak'>,
+	ctx: Omit<RoomContext, 'styles'>
+): boolean {
+	if (p.source === 'user') return true;
+	if (ctx.stage < (p.stage ?? 1)) return false;
+	if (p.until !== undefined && ctx.stage >= p.until) return false;
+	if (p.level !== undefined && ctx.level < p.level) return false;
+	if (p.streak !== undefined && ctx.bestStreak < p.streak) return false;
+	if (p.months && !p.months.includes(ctx.month)) return false;
+	return true;
+}
 
 export interface RoomItem {
 	id: string;
@@ -85,16 +145,19 @@ export interface RoomItem {
 	until?: number;
 	/** `'user'` placements skip the stage gate in the component. */
 	source?: 'user';
+	level?: number;
+	months?: number[];
+	streak?: number;
 	alt: string;
 }
 
-/** Resolve a placement against its kind: sprite src, size and alt text. */
-export function resolveItem(p: RoomPlacement): RoomItem {
+/** Resolve a placement against its kind: sprite src (in the chosen style), size and alt text. */
+export function resolveItem(p: RoomPlacement, styles: Record<string, string> = {}): RoomItem {
 	const kind = kindOf(p.kindId);
 	return {
 		id: p.id,
 		kindId: kind.id,
-		src: kind.sprite,
+		src: spriteFor(kind, styles[p.id]),
 		x: p.x,
 		y: p.y,
 		w: kind.footprintW,
@@ -102,12 +165,15 @@ export function resolveItem(p: RoomPlacement): RoomItem {
 		stage: p.stage,
 		until: p.until,
 		source: p.source,
+		level: p.level,
+		months: p.months,
+		streak: p.streak,
 		alt: kind.alt
 	};
 }
 
-/** Render-ready items in painter order — what LofiRoom.svelte draws. */
-export const ROOM_ITEMS: RoomItem[] = ROOM_PLACEMENTS.map(resolveItem);
+/** Render-ready items in painter order — what LofiRoom.svelte draws (default styles). */
+export const ROOM_ITEMS: RoomItem[] = ROOM_PLACEMENTS.map((p) => resolveItem(p));
 
 function placementById(id: string): RoomPlacement {
 	const p = ROOM_PLACEMENTS.find((item) => item.id === id);
@@ -137,3 +203,7 @@ export const LAMP_SPOT = centerOf('lamp');
 
 /** The window (source of the night rain layer) — derived from the `window` placement. */
 export const WINDOW_SPOT = rectOfId('window');
+/** Render-ready visible items for a room context, in painter order, in the chosen styles. */
+export function visibleItems(ctx: RoomContext): RoomItem[] {
+	return ROOM_PLACEMENTS.filter((p) => isVisible(p, ctx)).map((p) => resolveItem(p, ctx.styles));
+}

@@ -4,7 +4,7 @@
 
 <p>
   <img src="docs/screenshots/today-390x844.png" width="240" alt="Today screen" />
-  <img src="docs/screenshots/room-stage4-night-390x844.png" width="240" alt="Room at night" />
+  <img src="docs/screenshots/room-decor-390x844.png" width="240" alt="A finished, decorated room" />
   <img src="docs/screenshots/stats-390x844.png" width="240" alt="Stats screen" />
 </p>
 
@@ -20,14 +20,20 @@ alive, unlock badges, and furnish your room.
 ## Features
 
 - **Today** — a week strip with per-day progress rings, a daily summary, one-tap check-offs with
-  haptics, and backfill for the past 6 days.
+  haptics, and backfill for the past 6 days. Only habits due that day are listed.
+- **Schedules** — a habit can repeat every day, on weekdays, or on any set of weekdays.
+- **Rest days** — take one rest day a week; it doesn't break your streak.
+- **Reminders** — give a stack a time. Stackr notifies you while it's open or in the background, and
+  “Add to my calendar” exports repeating alarms that work even when it's closed. Installed apps
+  show habits left today on the icon badge.
 - **Stacks** — create from a template or from scratch; edit, reorder and delete stacks and habits
   from bottom sheets. Each stack shows a 30-day completion rate and per-habit week dots.
 - **Stats** — level and XP, current/best streak, a weekly bar chart, a 12-week heatmap and
   per-habit completion rates.
-- **Room** — a lofi pixel-art room that gains furniture across 6 stages. Tap any piece to see what
-  it is; the next stage's pieces show as silhouettes. Day/night lighting, rain at night, and a
-  sleepy mood after 3 idle days.
+- **Room** — a lofi pixel-art room that gains furniture across 6 stages, then keeps going: a new
+  decoration every level after that, streak trophies, seasonal visitors, and colors you pick for the
+  rug, bed, sleeping bag and poster. A little roommate wanders between spots by day and sleeps at
+  night. Tap anything (or anyone) to see what it is.
 - **Badges** — 20 badges for streaks, totals, levels, stacks and time of day, with progress.
 - **Backups** — export/restore a JSON backup and erase all data (Stats → ⚙︎).
 - **PWA** — installs to the home screen, works offline, respects safe areas and reduced motion.
@@ -72,7 +78,9 @@ Unchecking reverses exactly what checking awarded. Level N needs `25 × N × (N+
 (level 1 = 50, level 5 = 750, level 10 = 2,750).
 
 A **streak** is consecutive days with at least one check-off; it stays alive through today if you
-logged yesterday.
+logged yesterday. Rest days, and days with nothing scheduled, are skipped: they neither extend nor
+break a streak. A habit's own streak only counts the days it's scheduled. Rest days need to be at
+least 7 days apart and can't fall on a day you already checked something off.
 
 ### Room stages
 
@@ -88,16 +96,32 @@ check-offs are undone.
 | 5 | Lived In | 1,400 | A bookshelf, another plant and a pet pig |
 | 6 | Sanctuary | 2,200 | A media shelf, a speaker and string lights |
 
-The room is built from three modules:
+After stage 6 the room keeps growing:
+
+| Reward | Unlocks |
+| --- | --- |
+| A decoration per level (mug, cat, clock, beanbag, lamp, guitar, laptop, hanging plant, floor lamp, books, cactus, record player) | Levels 9–20 |
+| Bronze, silver and gold trophies on a wall shelf | Best streak of 7, 30 and 100 days |
+| A pumpkin | October–November |
+| A little pine with lights, and snow in the window | December (snow through February) |
+
+Styles are saved per piece and can be changed any time by tapping the piece.
+
+The room is built from these modules:
 
 - `catalog.ts` — one entry per object kind: sprite, native pixel size, footprint width, zone and
   stacking rules. Rendered height always follows the sprite's aspect ratio.
-- `layout.ts` — the scripted room: kind + tile position + stage window per piece.
+- `layout.ts` — the scripted room: kind + tile position + its unlock gates (stage window, level,
+  months, best streak) per piece.
 - `placement.ts` — the grid rules engine (bounds, zones, stacking, collisions). The layout tests
   run the scripted room through it, so a bad position fails CI.
+- `character.ts` — the roommate: a pure function of the visible furniture, mood and clock, walking
+  between spots on half-tile paths around the furniture.
 
-Sprites are CC0; see `src/lib/assets/room/CREDITS.md`. Composite sprites (rug, bookshelf, bed,
-sleeping bag) are rebuilt with `python3 scripts/compose-room-sprites.py` (needs Pillow).
+Furniture sprites are CC0; see `src/lib/assets/room/CREDITS.md`. Composite sprites (rug, bookshelf,
+bed, sleeping bag, roommate) are rebuilt with `python3 scripts/compose-room-sprites.py`. The
+decor, seasonal and trophy sprites are original, drawn by `python3 scripts/draw-room-decor.py`,
+which also makes the color variants. Both scripts need Pillow.
 
 ## Project structure
 
@@ -106,11 +130,11 @@ src/
 ├── lib/
 │   ├── assets/room/        CC0 pixel sprites + CREDITS.md
 │   ├── components/         Sheet, PageHeader, WeekStrip, ProgressRing, LofiRoom, Toast, …
-│   ├── room/               catalog, layout, placement engine, stage + mood math
-│   ├── services/           db.ts (IndexedDB), pwa.ts (service worker registration)
+│   ├── room/               catalog, layout, placement engine, roommate, stage + mood math
+│   ├── services/           db.ts (IndexedDB), pwa.ts (service worker), reminders.ts
 │   ├── stores/             app.svelte.ts (state + actions), profile.ts (XP/badges), toast
 │   ├── types/              data model
-│   └── utils/              gamification, badges, templates, feedback, helpers
+│   └── utils/              gamification, schedule, badges, templates, feedback, helpers
 ├── routes/                 / (Today), /stacks, /stacks/[id], /stats, /room
 └── sw.ts                   service worker (built to static/service-worker.js)
 ```

@@ -4,7 +4,9 @@
 	import { fade } from 'svelte/transition';
 	import { page } from '$app/state';
 	import { dev } from '$app/environment';
-	import { initializeState, refreshToday } from '$lib/stores/app.svelte';
+	import { initializeState, refreshToday, getAppState, isDone } from '$lib/stores/app.svelte';
+	import { upcomingReminders, scheduleReminders, setAppBadge, onRemindersChange } from '$lib/services/reminders';
+	import { dueHabits } from '$lib/utils/schedule';
 	import { registerServiceWorker } from '$lib/services/pwa';
 	import { haptic } from '$lib/utils/helpers';
 	import Toast from '$lib/components/Toast.svelte';
@@ -32,6 +34,27 @@
 			document.removeEventListener('visibilitychange', onresume);
 			clearInterval(timer);
 		};
+	});
+
+	// Reminders + app badge follow the data. `remindersTick` re-runs this when reminders are toggled.
+	const app = getAppState();
+	let remindersTick = $state(0);
+	onMount(() => onRemindersChange(() => remindersTick++));
+	$effect(() => {
+		if (status !== 'ready') return;
+		void remindersTick;
+		const { stacks, habits, today } = app;
+		void app.completions; // re-run on check-offs
+		const left = (stackId: string) =>
+			dueHabits(
+				habits.filter((h) => h.stack_id === stackId),
+				today
+			).filter((h) => !isDone(h.id, today)).length;
+		scheduleReminders(upcomingReminders(stacks, habits, isDone, today, new Date()), (id) => {
+			const s = getAppState();
+			return s.today === today ? { left: left(id) } : null;
+		});
+		setAppBadge(dueHabits(habits, today).filter((h) => !isDone(h.id, today)).length);
 	});
 
 	const TABS: { href: string; label: string; icon: IconName }[] = [

@@ -106,6 +106,101 @@ test('room shows furniture and badges, and old links redirect', async ({ page })
 	await expect(page.getByText('Next: Stage 2 · First Desk')).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Badges' })).toBeVisible();
 
-	await page.getByRole('button', { name: /sleeping bag/i }).click();
+	await page.getByTestId('lofi-item-floorbed').click();
 	await expect(page.getByRole('status')).toContainText('Sleeping bag');
+});
+
+test('a habit scheduled for other days leaves Today', async ({ page }) => {
+	await openApp(page);
+	await createStack(page, 'Gym', 'After work', 'Lift weights');
+	await page.getByRole('link', { name: /Gym/ }).first().click();
+	await page.getByRole('button', { name: /Lift weights/ }).click();
+
+	const sheet = page.getByRole('dialog', { name: 'Edit Habit' });
+	const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+	await sheet.getByRole('button', { name: todayName, exact: true }).click();
+	await expect(sheet.getByRole('button', { name: todayName, exact: true })).toHaveAttribute('aria-pressed', 'false');
+	await sheet.getByRole('button', { name: 'Save Changes' }).click();
+	await expect(sheet).toBeHidden();
+
+	await page.getByRole('link', { name: 'Today', exact: true }).click();
+	await expect(page.getByText(/Nothing due today in .*Gym/)).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Lift weights' })).toHaveCount(0);
+});
+
+test('a rest day can be taken and undone', async ({ page }) => {
+	await openApp(page);
+	await page.getByRole('button', { name: /Wind Down/ }).click();
+	await page.getByTestId('take-rest-day').click();
+	await expect(page.getByTestId('rest-banner')).toBeVisible();
+	// one per week: the offer goes away while a rest day is nearby
+	await expect(page.getByTestId('take-rest-day')).toHaveCount(0);
+
+	await page.reload();
+	await page.waitForSelector('nav[aria-label="Main"]');
+	await expect(page.getByTestId('rest-banner')).toBeVisible();
+	await page.getByTestId('rest-banner').getByRole('button', { name: 'Undo' }).click();
+	await expect(page.getByTestId('rest-banner')).toHaveCount(0);
+});
+
+test('a stack reminder shows on the stack and exports to the calendar', async ({ page }) => {
+	await openApp(page);
+	await page.getByRole('button', { name: /Morning Coffee/ }).click();
+	await page.getByRole('link', { name: 'Stacks', exact: true }).click();
+	await page.getByRole('link', { name: /Morning Coffee/ }).click();
+	await page.getByRole('button', { name: 'Edit' }).click();
+	const sheet = page.getByRole('dialog', { name: 'Edit Stack' });
+	await sheet.getByLabel(/Reminder/).fill('08:15');
+	await sheet.getByRole('button', { name: 'Save Changes' }).click();
+	await expect(sheet).toBeHidden();
+	await expect(page.getByText(/Reminder at 8:15/)).toBeVisible();
+
+	await page.getByRole('link', { name: 'Stats', exact: true }).click();
+	await page.getByRole('button', { name: 'Settings' }).click();
+	const download = page.waitForEvent('download');
+	await page.getByRole('button', { name: /Add to my calendar/ }).click();
+	const file = await download;
+	expect(file.suggestedFilename()).toBe('stackr-reminders.ics');
+});
+
+/** Seed a finished room: level 15, a 40-day best streak. */
+async function seedFinishedRoom(page: Page) {
+	await openApp(page);
+	await page.evaluate(async () => {
+		const uid = localStorage.getItem('stackr_local_user_id');
+		const db = await new Promise<IDBDatabase>((resolve, reject) => {
+			const req = indexedDB.open('stackr');
+			req.onsuccess = () => resolve(req.result);
+			req.onerror = () => reject(req.error);
+		});
+		const now = new Date().toISOString();
+		await new Promise<void>((resolve, reject) => {
+			const tx = db.transaction('profile', 'readwrite');
+			tx.objectStore('profile').put({
+				id: uid, xp: 6100, level: 15, streak_days: 0, longest_streak: 40, total_completions: 300,
+				theme: 'default', created_at: now, updated_at: now
+			});
+			tx.oncomplete = () => resolve();
+			tx.onerror = () => reject(tx.error);
+		});
+		db.close();
+	});
+	await page.goto('/room');
+	await page.waitForSelector('nav[aria-label="Main"]');
+}
+
+test('a finished room keeps rewarding: decor, trophies and styles', async ({ page }) => {
+	await seedFinishedRoom(page);
+	await expect(page.getByText(/Next decoration · Level 16/)).toBeVisible();
+	await expect(page.getByTestId('lofi-item-cat')).toBeVisible();
+	await expect(page.getByTestId('lofi-item-trophy-silver')).toBeVisible();
+	await expect(page.getByTestId('lofi-item-trophy-gold')).toHaveCount(0);
+
+	await page.getByTestId('pick-styles').click();
+	const sheet = page.getByRole('dialog', { name: /Style your/ });
+	await expect(sheet).toBeVisible();
+	const second = sheet.getByTestId('style-options').getByRole('button').nth(1);
+	await second.click();
+	// the next unpicked piece follows
+	await expect(page.getByRole('dialog', { name: /Style your/ })).toBeVisible();
 });

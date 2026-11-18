@@ -2,7 +2,15 @@
 	// Data controls: everything lives on this device, so backups matter.
 	import Sheet from './Sheet.svelte';
 	import Icon from './Icon.svelte';
-	import { exportBackup, importBackup, resetAllData } from '$lib/stores/app.svelte';
+	import { exportBackup, importBackup, resetAllData, getAppState } from '$lib/stores/app.svelte';
+	import {
+		notificationsSupported,
+		remindersEnabled,
+		enableReminders,
+		disableReminders,
+		buildCalendar,
+		formatTime
+	} from '$lib/services/reminders';
 	import { showToast } from '$lib/stores/toast.svelte';
 	import { today } from '$lib/utils/helpers';
 
@@ -13,21 +21,47 @@
 	let pendingImport = $state<string | null>(null);
 	let busy = $state(false);
 
+	const app = getAppState();
+	const withReminder = $derived(app.stacks.filter((s) => s.reminder));
+	let notifyOn = $state(false);
+	let denied = $state(false);
+
+	async function toggleNotify() {
+		if (notifyOn) {
+			disableReminders();
+			notifyOn = false;
+			return;
+		}
+		notifyOn = await enableReminders();
+		denied = !notifyOn && typeof Notification !== 'undefined' && Notification.permission === 'denied';
+		if (notifyOn) showToast('success', 'Reminders on', 'While Stackr is open or in the background', '🔔');
+	}
+
+	function saveFile(contents: string, type: string, filename: string) {
+		const url = URL.createObjectURL(new Blob([contents], { type }));
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = filename;
+		a.click();
+		setTimeout(() => URL.revokeObjectURL(url), 1000);
+	}
+
+	function addToCalendar() {
+		saveFile(buildCalendar(app.stacks, app.habits, app.today, location.origin), 'text/calendar', 'stackr-reminders.ics');
+		showToast('success', 'Calendar file saved', 'Open it to add your reminders', '📅');
+	}
+
 	$effect(() => {
 		if (open) {
 			confirmReset = false;
 			pendingImport = null;
+			notifyOn = remindersEnabled();
+			denied = false;
 		}
 	});
 
 	function download() {
-		const blob = new Blob([JSON.stringify(exportBackup(), null, 2)], { type: 'application/json' });
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement('a');
-		a.href = url;
-		a.download = `stackr-backup-${today()}.json`;
-		a.click();
-		setTimeout(() => URL.revokeObjectURL(url), 1000);
+		saveFile(JSON.stringify(exportBackup(), null, 2), 'application/json', `stackr-backup-${today()}.json`);
 		showToast('success', 'Backup saved', 'Keep it somewhere safe', '💾');
 	}
 
@@ -67,6 +101,49 @@
 </script>
 
 <Sheet bind:open title="Settings">
+	<h3 class="section-title">Reminders</h3>
+	{#if withReminder.length === 0}
+		<p class="card bg-slate-800/50 px-4 py-3.5 text-[13px] leading-relaxed text-slate-400">
+			Give a stack a reminder time (Stacks → a stack → Edit), then come back here to turn notifications on or add it to your
+			calendar.
+		</p>
+	{:else}
+		<div class="card divide-y divide-white/5 overflow-hidden bg-slate-800/50" data-test="reminder-settings">
+			{#if notificationsSupported()}
+				<button
+					type="button"
+					role="switch"
+					aria-checked={notifyOn}
+					onclick={toggleNotify}
+					class="flex w-full items-center gap-3 px-4 py-3.5 text-left active:bg-white/5"
+				>
+					<Icon name="bell" class="size-5 text-indigo-400" />
+					<span class="min-w-0 flex-1">
+						<span class="block text-[15px] text-white">Notifications</span>
+						<span class="block text-xs text-slate-500">While Stackr is open or in the background</span>
+					</span>
+					<span class="relative h-7 w-12 shrink-0 rounded-full transition-colors {notifyOn ? 'bg-emerald-500' : 'bg-slate-600'}">
+						<span class="absolute top-0.5 size-6 rounded-full bg-white shadow transition-[left] {notifyOn ? 'left-[1.375rem]' : 'left-0.5'}"></span>
+					</span>
+				</button>
+			{/if}
+			<button type="button" onclick={addToCalendar} class="flex w-full items-center gap-3 px-4 py-3.5 text-left active:bg-white/5">
+				<Icon name="calendar" class="size-5 text-indigo-400" />
+				<span class="min-w-0 flex-1">
+					<span class="block text-[15px] text-white">Add to my calendar</span>
+					<span class="block text-xs text-slate-500">Alarms that work even when Stackr is closed</span>
+				</span>
+			</button>
+		</div>
+		{#if denied}
+			<p class="mt-2 px-1 text-xs text-amber-300">Notifications are blocked for this site. Allow them in your browser settings, or use the calendar.</p>
+		{/if}
+		<p class="mt-2 px-1 text-xs text-slate-500">
+			{withReminder.map((s) => `${s.icon} ${formatTime(s.reminder!)}`).join(' · ')}
+		</p>
+	{/if}
+
+	<h3 class="section-title mt-6">Your data</h3>
 	<p class="mb-4 text-[13px] leading-relaxed text-slate-400">
 		Stackr keeps your data only on this device — no account, no cloud. Save a backup now and then so clearing your
 		browser or switching phones doesn’t lose your progress.

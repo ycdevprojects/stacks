@@ -67,6 +67,20 @@ the composition source and provenance.
 - `nightstand.png`: recoloured in place — the slice had picked up the
   neighbouring tile's white frame, which is now wood-toned.
 
+## Kenney Roguelike Characters pack (the roommate)
+
+- Source: https://opengameart.org/sites/default/files/Roguelike%20Characters%20pack.zip
+- License: Creative Commons Zero (CC0), per the pack's `License.txt`
+  ("You may use these assets in personal and commercial projects.")
+- Author: Kenney Vleugels (Kenney.nl)
+- Files used (sliced from `Spritesheet/roguelikeChar_transparent.png`, 16px
+  tiles with a 1px margin): `char-base.png` (row 0, col 0 — body),
+  `char-chest.png` (row 0, col 6 — orange shirt), `char-legs-a.png` (row 1,
+  col 3 — legs together) and `char-legs-b.png` (row 1, col 4 — legs apart).
+  The kit's layers share one 16x16 grid, so stacking them gives the
+  `char-stand.png` / `char-walk.png` frames and the 16x32 `character.png`
+  sheet (row 0 stand, row 1 walk).
+
 ## Ninja Adventure asset pack (pet sprite)
 
 - Source: https://pixel-boy.itch.io/ninja-adventure-asset-pack
@@ -81,8 +95,13 @@ the composition source and provenance.
   `crate.png` — single tile cropped from `content/destroyable/crate.png`
   (wooden storage box).
 
-## Note
+## Original decor and style variants
 
-The stage-5 pet is a pig from the Ninja Adventure pack because none of the
-other licensed packs above contain a cat; the brief allows optional
-cherry-picks from this pack.
+Everything in `decor/` (the level decorations, seasonal pieces and streak
+trophies) is original pixel art for Stackr, drawn from text maps in
+`scripts/draw-room-decor.py` using the palette of the Kenney pieces. It is
+released under the project's MIT license.
+
+Everything in `variants/` is a recolour of a sprite above (rug, bed,
+sleeping bag, poster), made by the same script by shifting the hue of the
+fabric pixels only; each keeps its source sprite's license.

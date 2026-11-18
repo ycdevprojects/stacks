@@ -7,6 +7,7 @@
 	import { STACK_COLORS, STACK_ICONS, randomColor, randomIcon, theme } from '$lib/utils/helpers';
 	import { showToast } from '$lib/stores/toast.svelte';
 	import { announceBadges } from '$lib/utils/feedback';
+	import { remindersEnabled } from '$lib/services/reminders';
 
 	let {
 		open = $bindable(false),
@@ -19,6 +20,7 @@
 	let color = $state<string>('indigo');
 	let icon = $state('☕');
 	let firstHabit = $state('');
+	let reminder = $state('');
 	let confirmDelete = $state(false);
 	let saving = $state(false);
 
@@ -30,6 +32,7 @@
 		color = stack?.color ?? randomColor();
 		icon = stack?.icon ?? randomIcon();
 		firstHabit = '';
+		reminder = stack?.reminder ?? '';
 		confirmDelete = false;
 	});
 
@@ -39,7 +42,7 @@
 		if (!valid || saving) return;
 		saving = true;
 		try {
-			const fields = { name: name.trim(), trigger: trigger.trim(), color, icon };
+			const fields = { name: name.trim(), trigger: trigger.trim(), color, icon, reminder: reminder || undefined };
 			if (stack) {
 				await updateStack({ ...stack, ...fields });
 				showToast('success', 'Stack saved', undefined, icon);
@@ -54,6 +57,10 @@
 			saving = false;
 		}
 	}
+
+	// Point people at Settings the first time they set a time without notifications on.
+	const reminderHint = () =>
+		reminder && reminder !== stack?.reminder && !remindersEnabled() ? 'Turn on reminders in Stats → ⚙︎' : undefined;
 
 	async function remove() {
 		if (!stack) return;
@@ -119,6 +126,16 @@
 				/>
 			</div>
 		{/if}
+
+		<div>
+			<label for="stack-reminder" class="field-label">Reminder <span class="text-slate-500">(optional)</span></label>
+			<div class="flex gap-2">
+				<input id="stack-reminder" type="time" class="field flex-1" bind:value={reminder} />
+				{#if reminder}
+					<button type="button" class="btn-secondary px-4" onclick={() => (reminder = '')}>Clear</button>
+				{/if}
+			</div>
+		</div>
 
 		<fieldset>
 			<legend class="field-label">Icon</legend>
