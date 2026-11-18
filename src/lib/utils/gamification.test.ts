@@ -130,3 +130,38 @@ describe('longestStreak', () => {
 		expect(longestStreak([daysAgo(1), daysAgo(1), daysAgo(0)])).toBe(2);
 	});
 });
+
+describe('streaks with excused days', () => {
+	const T = '2026-11-18';
+	const d = (n: number) => {
+		const [y, m, day] = T.split('-').map(Number);
+		const x = new Date(y, m - 1, day - n);
+		return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+	};
+
+	it('skips over a rest day without counting it', () => {
+		const rest = new Set([d(2)]);
+		expect(calculateStreak([d(0), d(1), d(3), d(4)], (x) => rest.has(x), T)).toBe(4);
+	});
+
+	it('skips unscheduled days for a Mon/Wed/Fri-style habit', () => {
+		// done every other day; the days between are unscheduled
+		const off = new Set([d(1), d(3), d(5)]);
+		expect(calculateStreak([d(0), d(2), d(4), d(6)], (x) => off.has(x), T)).toBe(4);
+	});
+
+	it('still breaks on a scheduled day that was missed', () => {
+		const off = new Set([d(1)]);
+		expect(calculateStreak([d(0), d(3)], (x) => off.has(x), T)).toBe(1);
+	});
+
+	it('stays alive through an excused yesterday', () => {
+		const rest = new Set([d(1)]);
+		expect(calculateStreak([d(2), d(3)], (x) => rest.has(x), T)).toBe(2);
+	});
+
+	it('longestStreak bridges excused days', () => {
+		const rest = new Set([d(5)]);
+		expect(longestStreak([d(7), d(6), d(4), d(3), d(0)], (x) => rest.has(x))).toBe(4);
+	});
+});

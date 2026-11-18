@@ -1,6 +1,16 @@
 <script lang="ts">
 	import type { Stack } from '$lib/types';
-	import { getAppState, toggleCompletion, createStack, isDone, habitsOf } from '$lib/stores/app.svelte';
+	import {
+		getAppState,
+		toggleCompletion,
+		createStack,
+		isDone,
+		habitsOf,
+		isRestDay,
+		canRest,
+		toggleRestDay
+	} from '$lib/stores/app.svelte';
+	import { dueHabits, habitExcuse } from '$lib/utils/schedule';
 	import { calculateStreak, xpProgressInLevel } from '$lib/utils/gamification';
 	import { formatDate, greeting, theme, addDays, haptic } from '$lib/utils/helpers';
 	import { STACK_TEMPLATES, type StackTemplate } from '$lib/utils/templates';
@@ -38,13 +48,19 @@
 			: formatDate(selectedDate, { month: 'long', day: 'numeric', year: 'numeric' })
 	);
 
-	const checklist = $derived(
+	// Stacks with habits due on the selected day; stacks whose habits all rest that day are listed apart.
+	const allChecklist = $derived(
 		app.stacks.map((stack) => {
-			const habits = habitsOf(stack.id);
+			const all = habitsOf(stack.id);
+			const habits = dueHabits(all, selectedDate);
 			const done = habits.filter((h) => isDone(h.id, selectedDate)).length;
-			return { stack, habits, done, total: habits.length };
+			return { stack, habits, done, total: habits.length, off: all.length > 0 && habits.length === 0 };
 		})
 	);
+	const checklist = $derived(allChecklist.filter((s) => !s.off));
+	const offStacks = $derived(allChecklist.filter((s) => s.off).map((s) => s.stack));
+	const resting = $derived(isRestDay(selectedDate));
+	const restable = $derived(!resting && canRest(selectedDate));
 	const totals = $derived(
 		checklist.reduce((acc, s) => ({ done: acc.done + s.done, total: acc.total + s.total }), { done: 0, total: 0 })
 	);
@@ -56,17 +72,29 @@
 			if (list) list.push(c.completed_at);
 			else dates.set(c.habit_id, [c.completed_at]);
 		}
-		return new Map(app.habits.map((h) => [h.id, calculateStreak(dates.get(h.id) ?? [])]));
+		return new Map(app.habits.map((h) => [h.id, calculateStreak(dates.get(h.id) ?? [], habitExcuse(h, app.restDays))]));
 	});
 
 	const atRisk = $derived(
-		isToday ? app.habits.filter((h) => !isDone(h.id, app.today) && (streaks.get(h.id) ?? 0) >= 3) : []
+		isToday && !resting
+			? dueHabits(app.habits, app.today).filter((h) => !isDone(h.id, app.today) && (streaks.get(h.id) ?? 0) >= 3)
+			: []
 	);
 
 	const progress = $derived(xpProgressInLevel(app.profile?.xp ?? 0));
 
 	function ratioFor(date: string): number {
-		return app.habits.length ? app.habits.filter((h) => isDone(h.id, date)).length / app.habits.length : 0;
+		const due = dueHabits(app.habits, date);
+		return due.length ? due.filter((h) => isDone(h.id, date)).length / due.length : 0;
+	}
+
+	async function rest() {
+		haptic(10);
+		const wasResting = resting;
+		if (await toggleRestDay(selectedDate)) {
+			if (wasResting) showToast('info', 'Rest day removed', undefined, '↩️');
+			else showToast('success', 'Rest day', 'Your streak is safe. See you tomorrow.', '💤');
+		}
 	}
 
 	async function toggle(habitId: string) {
@@ -107,7 +135,7 @@
 					<span class="text-[11px] font-bold text-white">{app.profile.level}</span>
 				</ProgressRing>
 				<span class="text-[13px] font-semibold text-slate-200">
-					{#if app.profile.streak_days > 0}🔥 {app.profile.streak_days}{:else}Lv {app.profile.level}{/if}
+					{#if app.streak > 0}🔥 {app.streak}{:else}Lv {app.profile.level}{/if}
 				</span>
 			</a>
 		{/if}
@@ -149,7 +177,7 @@
 		Build my own stack
 	</button>
 {:else}
-	<WeekStrip bind:selected={selectedDate} today={app.today} ratio={ratioFor} />
+	<WeekStrip bind:selected={selectedDate} today={app.today} ratio={ratioFor} rest={isRestDay} />
 
 	<!-- Day summary -->
 	{#if totals.total > 0}
@@ -195,6 +223,16 @@
 					<b>{atRisk.length} streaks</b> are waiting on you today.
 				{/if}
 			</p>
+		</div>
+	{/if}
+
+	{#if resting}
+		<div class="mb-4 flex items-center gap-3 rounded-2xl bg-sky-500/10 px-4 py-3 ring-1 ring-sky-400/20" data-test="rest-banner">
+			<span class="text-xl">💤</span>
+			<p class="min-w-0 flex-1 text-[13px] text-sky-100">
+				<b>Rest day.</b> Your streak won’t break{isToday ? ' today' : ''}. You can still check things off.
+			</p>
+			<button type="button" onclick={rest} class="shrink-0 text-[13px] font-semibold text-sky-300 active:opacity-60">Undo</button>
 		</div>
 	{/if}
 
@@ -266,6 +304,27 @@
 			</section>
 		{/each}
 	</div>
+
+	{#if offStacks.length > 0}
+		<p class="mt-4 px-1 text-[13px] text-slate-500">
+			Nothing due {isToday ? 'today' : 'this day'} in {offStacks.map((s) => `${s.icon} ${s.name}`).join(', ')}.
+		</p>
+	{/if}
+
+	{#if restable && totals.total > 0}
+		<button
+			type="button"
+			onclick={rest}
+			class="pressable mt-4 flex w-full items-center gap-3 rounded-3xl bg-slate-900/60 px-4 py-3.5 text-left ring-1 ring-white/5"
+			data-test="take-rest-day"
+		>
+			<span class="text-xl">💤</span>
+			<span class="min-w-0 flex-1">
+				<span class="block text-[15px] font-medium text-slate-200">Take a rest day</span>
+				<span class="block text-xs text-slate-500">Your streak won’t break. One per week.</span>
+			</span>
+		</button>
+	{/if}
 
 	<button
 		type="button"

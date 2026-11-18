@@ -6,6 +6,8 @@
 	import { getAppState, habitsOf, isDone, moveHabit } from '$lib/stores/app.svelte';
 	import { calculateStreak } from '$lib/utils/gamification';
 	import { addDays, dateOf, theme, haptic } from '$lib/utils/helpers';
+	import { dueHabits, habitExcuse, isScheduled, scheduleLabel } from '$lib/utils/schedule';
+	import { formatTime } from '$lib/services/reminders';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import StackSheet from '$lib/components/StackSheet.svelte';
 	import HabitSheet from '$lib/components/HabitSheet.svelte';
@@ -29,17 +31,25 @@
 		);
 		const days = Array.from({ length: 30 }, (_, i) => addDays(app.today, -i)).filter((d) => d >= start);
 		let checks = 0;
+		let slots = 0;
 		let fullDays = 0;
 		for (const d of days) {
-			const n = habits.filter((h) => isDone(h.id, d)).length;
+			const due = dueHabits(habits, d);
+			// Rest days and days with nothing scheduled don't count against the rate.
+			if (due.length === 0 || app.restDays.includes(d)) continue;
+			const n = due.filter((h) => isDone(h.id, d)).length;
 			checks += n;
-			if (n === habits.length) fullDays++;
+			slots += due.length;
+			if (n === due.length) fullDays++;
 		}
-		return { rate: Math.round((checks / (days.length * habits.length)) * 100), fullDays };
+		return { rate: slots ? Math.round((checks / slots) * 100) : 0, fullDays };
 	});
 
-	function streakOf(habitId: string): number {
-		return calculateStreak(app.completions.filter((c) => c.habit_id === habitId).map((c) => c.completed_at));
+	function streakOf(habit: Habit): number {
+		return calculateStreak(
+			app.completions.filter((c) => c.habit_id === habit.id).map((c) => c.completed_at),
+			habitExcuse(habit, app.restDays)
+		);
 	}
 
 	let showEdit = $state(false);
@@ -69,9 +79,16 @@
 	<section class="card mb-6 p-5">
 		<div class="flex items-center gap-4">
 			<span class="grid size-16 shrink-0 place-items-center rounded-2xl text-3xl {t.soft}">{stack.icon}</span>
-			<p class="text-[15px] leading-snug text-slate-300">
-				<span class="font-semibold text-white">{stack.trigger}</span>, I will…
-			</p>
+			<div class="min-w-0">
+				<p class="text-[15px] leading-snug text-slate-300">
+					<span class="font-semibold text-white">{stack.trigger}</span>, I will…
+				</p>
+				{#if stack.reminder}
+					<p class="mt-1.5 flex items-center gap-1 text-xs text-slate-500">
+						<Icon name="bell" class="size-3.5" strokeWidth={2} /> Reminder at {formatTime(stack.reminder)}
+					</p>
+				{/if}
+			</div>
 		</div>
 		{#if summary}
 			<div class="mt-5 grid grid-cols-3 divide-x divide-white/5 text-center">
@@ -127,7 +144,7 @@
 							</button>
 						</div>
 					{:else}
-						{@const streak = streakOf(habit.id)}
+						{@const streak = streakOf(habit)}
 						<button type="button" onclick={() => openHabit(habit)} class="flex w-full items-center gap-3 px-4 py-3.5 text-left active:bg-white/5">
 							<span class="min-w-0 flex-1">
 								<span class="block truncate text-[15px] text-white">{habit.name}</span>
@@ -137,10 +154,17 @@
 								<span class="mt-2 flex items-center gap-1" aria-label="Last 7 days">
 									{#each week as d (d)}
 										<span
-											class="size-2.5 rounded-full {isDone(habit.id, d) ? t.solid : 'bg-slate-800'}"
+											class="size-2.5 rounded-full {isDone(habit.id, d)
+												? t.solid
+												: isScheduled(habit, d)
+													? 'bg-slate-800'
+													: 'ring-1 ring-slate-800 ring-inset'}"
 											title={dateOf(d).toLocaleDateString(undefined, { weekday: 'short' })}
 										></span>
 									{/each}
+									{#if habit.days?.length}
+										<span class="ml-1.5 text-xs text-slate-500">{scheduleLabel(habit.days)}</span>
+									{/if}
 									{#if streak > 1}
 										<span class="ml-1.5 text-xs font-semibold text-orange-400">🔥 {streak}</span>
 									{/if}

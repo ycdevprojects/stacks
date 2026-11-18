@@ -13,6 +13,13 @@ const SHOTS = [
 	{ file: 'docs/screenshots/room-stage1-390x844.png', path: '/room', xp: 40, hour: 12 },
 	{ file: 'docs/screenshots/room-stage4-night-390x844.png', path: '/room', xp: 900, hour: 21 },
 	{ file: 'docs/screenshots/room-stage6-390x844.png', path: '/room', xp: 2400, hour: 15 },
+	{
+		file: 'docs/screenshots/room-decor-390x844.png',
+		path: '/room',
+		xp: 6100,
+		hour: 11,
+		profile: { longest_streak: 40, room_styles: { rug: 'blue', bed: 'green', poster: 'teal' } }
+	},
 	{ file: 'docs/screenshots/stats-390x844.png', path: '/stats', xp: 920, hour: 9 }
 ];
 
@@ -29,7 +36,7 @@ for (const shot of SHOTS) {
 	await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
 	await page.waitForFunction(() => localStorage.getItem('stackr_local_user_id') !== null, null, { timeout: 15000 });
 
-	await page.evaluate(async ({ xp, done }) => {
+	await page.evaluate(async ({ xp, done, profile: extra }) => {
 		const uid = localStorage.getItem('stackr_local_user_id');
 		const db = await new Promise((resolve, reject) => {
 			const req = indexedDB.open('stackr');
@@ -65,7 +72,7 @@ for (const shot of SHOTS) {
 		while (25 * (level + 1) * (level + 2) <= xp) level++;
 		const profile = {
 			id: uid, xp, level, streak_days: 6, longest_streak: 12, total_completions: completions.length,
-			theme: 'default', created_at: iso, updated_at: iso
+			theme: 'default', created_at: iso, updated_at: iso, ...extra
 		};
 		await new Promise((resolve, reject) => {
 			const tx = db.transaction(['profile', 'stacks', 'habits', 'completions'], 'readwrite');

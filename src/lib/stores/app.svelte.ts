@@ -10,8 +10,10 @@ import {
 	updateProfileOnUncomplete,
 	checkAndUnlockAchievements,
 	checkIfFullStackToday,
-	isStackCompleteOnDate
+	isStackCompleteOnDate,
+	profileStreak
 } from './profile';
+import { canRestOn } from '$lib/utils/schedule';
 
 const LOCAL_USER_ID_KEY = 'stackr_local_user_id';
 
@@ -25,6 +27,9 @@ let today = $state(todayStr());
 
 // "habitId|date" keys of completions currently in a done-set lookup.
 const doneKeys = $derived(new Set(completions.map((c) => `${c.habit_id}|${c.completed_at}`)));
+// Live streak: the stored streak_days goes stale when days pass without opening the app.
+const streak = $derived(profile ? profileStreak(profile, completions, habits) : 0);
+const restDays = $derived(profile?.rest_days ?? []);
 
 export function getAppState() {
 	return {
@@ -34,6 +39,9 @@ export function getAppState() {
 		get achievements() { return achievements; },
 		get profile() { return profile; },
 		get userId() { return userId; },
+		/** Current overall streak in days (rest days and unscheduled days don't break it). */
+		get streak() { return streak; },
+		get restDays() { return restDays; },
 		/** Local date, kept current across midnight while the app stays open. */
 		get today() { return today; }
 	};
@@ -95,6 +103,9 @@ export async function initializeState(): Promise<void> {
 		await db.saveProfile(fresh);
 		profile = fresh;
 	}
+	// Bring the stored streak up to date (it can only shrink while the app is closed).
+	const live = profileStreak(profile, completions, habits);
+	if (live !== profile.streak_days) await saveProfile({ streak_days: live });
 	// Quietly catch up on badges earned before they were tracked (older versions, imports).
 	await unlockAchievements();
 }
@@ -103,6 +114,13 @@ export async function initializeState(): Promise<void> {
 export function refreshToday(): void {
 	const t = todayStr();
 	if (t !== today) today = t;
+}
+
+async function saveProfile(changes: Partial<Profile>): Promise<void> {
+	if (!profile) return;
+	const updated: Profile = { ...$state.snapshot(profile), ...changes, updated_at: now() };
+	await db.saveProfile(updated);
+	profile = updated;
 }
 
 // ============ ACHIEVEMENTS ============
@@ -167,10 +185,15 @@ export async function moveStack(id: string, delta: -1 | 1): Promise<void> {
 
 // ============ HABITS ============
 
-export async function createHabit(stackId: string, name: string, description?: string): Promise<Habit> {
+export async function createHabit(
+	stackId: string,
+	name: string,
+	description?: string,
+	days?: number[]
+): Promise<Habit> {
 	const siblings = habitsOf(stackId);
 	const habit: Habit = {
-		id: generateId(), stack_id: stackId, user_id: requireUser(), name, description,
+		id: generateId(), stack_id: stackId, user_id: requireUser(), name, description, days,
 		sort_order: siblings.length ? Math.max(...siblings.map((h) => h.sort_order)) + 1 : 0,
 		created_at: now(), updated_at: now()
 	};
@@ -263,6 +286,34 @@ export async function toggleCompletion(habitId: string, date: string = today): P
 	} finally {
 		pending.delete(key);
 	}
+}
+
+// ============ REST DAYS ============
+
+export function isRestDay(date: string): boolean {
+	return restDays.includes(date);
+}
+
+export function canRest(date: string): boolean {
+	return canRestOn(date, restDays, completions.some((c) => c.completed_at === date));
+}
+
+/** Mark or unmark a rest day. Returns false when the day can't be a rest day. */
+export async function toggleRestDay(date: string): Promise<boolean> {
+	if (!profile) return false;
+	let next: string[];
+	if (isRestDay(date)) next = restDays.filter((d) => d !== date);
+	else if (canRest(date)) next = [...restDays, date].sort();
+	else return false;
+	const s = profileStreak({ rest_days: next }, completions, habits);
+	await saveProfile({ rest_days: next, streak_days: s, longest_streak: Math.max(profile.longest_streak, s) });
+	return true;
+}
+
+// ============ ROOM ============
+
+export async function setRoomStyle(placementId: string, variant: string): Promise<void> {
+	await saveProfile({ room_styles: { ...(profile?.room_styles ?? {}), [placementId]: variant } });
 }
 
 // ============ BACKUP / RESET ============

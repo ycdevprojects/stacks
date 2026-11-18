@@ -27,6 +27,8 @@ interface WithReveal {
 	stage?: number;
 	until?: number;
 	source?: 'user';
+	/** Seasonal months (0 = January); placements in disjoint months never meet. */
+	months?: number[];
 }
 
 export interface PlacementIssue {
@@ -54,6 +56,7 @@ export function coexistsWith(
 ): boolean {
 	const wa = windowOf(a);
 	const wb = windowOf(b);
+	if (a.months && b.months && !a.months.some((m) => b.months!.includes(m))) return false;
 	return wa.start < wb.end && wb.start < wa.end;
 }
 

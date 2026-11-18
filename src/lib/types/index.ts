@@ -10,6 +10,8 @@ export interface Stack {
 	color: string;
 	/** Emoji. */
 	icon: string;
+	/** Daily reminder time, "HH:MM" local. */
+	reminder?: string;
 	sort_order: number;
 	created_at: string;
 	updated_at: string;
@@ -21,6 +23,8 @@ export interface Habit {
 	user_id: string;
 	name: string;
 	description?: string;
+	/** Weekdays the habit is due (0 = Sunday). Missing or empty = every day. */
+	days?: number[];
 	sort_order: number;
 	created_at: string;
 	updated_at: string;
@@ -44,6 +48,10 @@ export interface Profile {
 	longest_streak: number;
 	total_completions: number;
 	theme: string;
+	/** Rest days (YYYY-MM-DD): excused from streaks. At most one per 7 days. */
+	rest_days?: string[];
+	/** Chosen style per room placement id, e.g. { rug: 'blue' }. */
+	room_styles?: Record<string, string>;
 	created_at: string;
 	updated_at: string;
 }

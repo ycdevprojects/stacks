@@ -13,8 +13,9 @@ import {
 } from '$lib/utils/gamification';
 import { generateId, today } from '$lib/utils/helpers';
 import { checkAllAchievements } from '$lib/utils/badges';
+import { dueHabits, overallExcuse } from '$lib/utils/schedule';
 
-/** All habits in the given stack have a completion on `dateStr` in `completions`. */
+/** Every habit in the stack that is due on `dateStr` has a completion that day. */
 export function isStackCompleteOnDate(
 	stackId: string,
 	habits: Habit[],
@@ -26,7 +27,7 @@ export function isStackCompleteOnDate(
 		completions.filter(c => c.completed_at === dateStr).map(c => c.habit_id)
 	);
 	if (extra) done.add(extra.habit_id);
-	const stackHabits = habits.filter(h => h.stack_id === stackId);
+	const stackHabits = dueHabits(habits.filter(h => h.stack_id === stackId), dateStr);
 	if (stackHabits.length === 0) return false;
 	return stackHabits.every(h => done.has(h.id));
 }
@@ -138,6 +139,11 @@ export function calculateUncompletionXP(
 	return { base, stackBonus, streakBonus, total: base + stackBonus + streakBonus };
 }
 
+/** The overall streak: days with a check-in, skipping rest days and days with nothing due. */
+export function profileStreak(profile: Pick<Profile, 'rest_days'>, completions: Completion[], habits: Habit[]): number {
+	return calculateStreak(completions.map(c => c.completed_at), overallExcuse(habits, profile.rest_days ?? []));
+}
+
 export async function updateProfileOnComplete(
 	profile: Profile,
 	completions: Completion[],
@@ -147,8 +153,7 @@ export async function updateProfileOnComplete(
 	date: string = today()
 ): Promise<Profile> {
 	const newTotal = profile.total_completions + 1;
-	const habitDates = completions.map(c => c.completed_at);
-	const newStreak = calculateStreak(habitDates);
+	const newStreak = profileStreak(profile, completions, habits);
 	const newLongest = Math.max(profile.longest_streak, newStreak);
 
 	const xpGain = calculateCompletionXP(completions, stacks, habits, newStreak, habitId, date);
@@ -177,8 +182,7 @@ export async function updateProfileOnUncomplete(
 	habitId: string,
 	date: string = today()
 ): Promise<Profile> {
-	const habitDates = remainingCompletions.map(c => c.completed_at);
-	const newStreak = calculateStreak(habitDates);
+	const newStreak = profileStreak(profile, remainingCompletions, habits);
 	const newLongest = Math.max(profile.longest_streak, newStreak);
 
 	// Use the profile's current streak_days as "previous streak" for streak bonus deduction

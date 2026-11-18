@@ -8,6 +8,7 @@ Writes:
   src/lib/assets/room/bed.png          (15x25, head tile + blanket rows of the body tile)
   src/lib/assets/room/sleeping-bag.png (16x11, the bag half of floorbed.png)
   src/lib/assets/room/nightstand.png   (recoloured in place: sheet-bleed white -> wood)
+  src/lib/assets/room/character.png    (16x32, the roommate: row 0 stand, row 1 walk)
 
 One sprite per object: the renderer places a single <img> per object instead
 of stacking per-tile entries, and the item catalog (src/lib/room/catalog.ts)
@@ -70,6 +71,28 @@ def compose_bed() -> None:
     print(f"bed.png: {bed.size[0]}x{bed.size[1]}")
 
 
+# The roommate: layers of the Kenney avatar kit share one 16x16 grid.
+CHAR_FRAMES = [
+    ("char-stand", ["char-base", "char-chest", "char-legs-a"]),
+    ("char-walk", ["char-base", "char-chest", "char-legs-b"]),
+]
+
+
+def compose_character() -> None:
+    frames = []
+    for name, layers in CHAR_FRAMES:
+        frame = Image.new("RGBA", (TILE, TILE), (0, 0, 0, 0))
+        for layer in layers:
+            frame.alpha_composite(Image.open(ROOM / f"{layer}.png").convert("RGBA"))
+        frame.save(ROOM / f"{name}.png")
+        frames.append(frame)
+    sheet = Image.new("RGBA", (TILE, TILE * len(frames)), (0, 0, 0, 0))
+    for i, frame in enumerate(frames):
+        sheet.paste(frame, (0, i * TILE))
+    sheet.save(ROOM / "character.png")
+    print(f"character.png: {sheet.size[0]}x{sheet.size[1]}")
+
+
 def crop_sleeping_bag() -> None:
     bag = Image.open(ROOM / "floorbed.png").convert("RGBA").crop(SLEEPING_BAG_CROP)
     bag.save(ROOM / "sleeping-bag.png")
@@ -94,3 +117,4 @@ if __name__ == "__main__":
     compose_bed()
     crop_sleeping_bag()
     recolor_nightstand()
+    compose_character()

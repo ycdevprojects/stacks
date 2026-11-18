@@ -1,6 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { ROOM_ITEMS, ROOM_PLACEMENTS, ROOM_GRID, LAMP_SPOT, WINDOW_SPOT, resolveItem } from './layout';
+import {
+	ROOM_ITEMS,
+	ROOM_PLACEMENTS,
+	ROOM_GRID,
+	LAMP_SPOT,
+	WINDOW_SPOT,
+	DECOR_ORDER,
+	resolveItem,
+	isVisible,
+	visibleItems
+} from './layout';
 import { kindOf, footprintH } from './catalog';
+import { xpForLevel } from '$lib/utils/gamification';
+import { STAGE_THRESHOLDS } from './room-stage';
 import { validatePlacements, overlaps, rectOf } from './placement';
 import { MAX_STAGE } from './room-stage';
 
@@ -106,5 +118,55 @@ describe('composed one-sprite objects', () => {
 		expect(LAMP_SPOT.x).toBeCloseTo(9.095, 12);
 		expect(LAMP_SPOT.y).toBeCloseTo(4.275, 12);
 		expect(WINDOW_SPOT).toEqual({ x: 6.95, y: 0.08, w: 0.85, h: 0.85 });
+	});
+});
+describe('rewards beyond the stages', () => {
+	const ctx = { stage: 6, level: 8, month: 5, bestStreak: 0 };
+
+	it('unlocks one decoration per level, starting right after the room is complete', () => {
+		const levels = DECOR_ORDER.map((p) => p.level);
+		expect(levels).toEqual(levels.map((_, i) => levels[0]! + i));
+		// The first decoration's level needs more XP than the last stage.
+		expect(xpForLevel(levels[0]!)).toBeGreaterThan(STAGE_THRESHOLDS[STAGE_THRESHOLDS.length - 1]);
+		expect(xpForLevel(levels[0]! - 1)).toBeLessThanOrEqual(STAGE_THRESHOLDS[STAGE_THRESHOLDS.length - 1]);
+	});
+
+	it('gates decor by level', () => {
+		const mug = ROOM_PLACEMENTS.find((p) => p.id === 'mug')!;
+		expect(isVisible(mug, ctx)).toBe(false);
+		expect(isVisible(mug, { ...ctx, level: 9 })).toBe(true);
+	});
+
+	it('gates trophies by best streak', () => {
+		const ids = (bestStreak: number) =>
+			visibleItems({ ...ctx, bestStreak })
+				.map((i) => i.id)
+				.filter((id) => id.startsWith('trophy'));
+		expect(ids(6)).toEqual([]);
+		expect(ids(7)).toEqual(['trophy-shelf', 'trophy-bronze']);
+		expect(ids(100)).toHaveLength(4);
+	});
+
+	it('shows seasonal pieces only in their months, never together', () => {
+		const seasonal = (month: number) =>
+			visibleItems({ ...ctx, month })
+				.map((i) => i.id)
+				.filter((id) => id === 'pumpkin' || id === 'pine');
+		expect(seasonal(5)).toEqual([]);
+		expect(seasonal(9)).toEqual(['pumpkin']);
+		expect(seasonal(11)).toEqual(['pine']);
+	});
+
+	it('renders the chosen style', () => {
+		const rug = visibleItems({ ...ctx, styles: { rug: 'blue' } }).find((i) => i.id === 'rug')!;
+		expect(rug.src).not.toBe(kindOf('rug').sprite);
+		expect(rug.src).toBe(kindOf('rug').variants!.find((v) => v.id === 'blue')!.sprite);
+	});
+
+	it('validates every combination of seasonal + full decor against the engine', () => {
+		for (const month of [0, 9, 11]) {
+			const all = ROOM_PLACEMENTS.filter((p) => isVisible(p, { stage: 6, level: 99, bestStreak: 999, month }));
+			expect(validatePlacements(all), `month ${month}`).toEqual([]);
+		}
 	});
 });
