@@ -219,7 +219,7 @@
 		</div>
 	{/each}
 </div>
-<p class="mt-2 px-1 text-[11px] text-slate-600">A new decoration every level after the room is complete; trophies for 7, 30 and 100-day streaks; and a seasonal visitor every month.</p>
+<p class="mt-2 px-1 text-[11px] text-slate-600">A new decoration every level after the room is complete; trophies for 7, 30 and 100-day streaks; and seasonal visitors all year.</p>
 
 <!-- Badges -->
 <div id="badges" class="mt-7 mb-2 flex items-baseline justify-between px-1">

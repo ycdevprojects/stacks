@@ -80,7 +80,7 @@ export const ROOM_PLACEMENTS: RoomPlacement[] = [
 	{ id: 'trophy-silver', kindId: 'trophy-silver', x: 2.64, y: 0.58, stage: 1, streak: 30 },
 	{ id: 'trophy-gold', kindId: 'trophy-gold', x: 2.98, y: 0.58, stage: 1, streak: 100 },
 
-	// Seasonal: one visitor every month, sharing one corner (months never overlap).
+	// Seasonal: one visitor every month in this corner (months never overlap).
 	{ id: 'snow-globe', kindId: 'snow-globe', x: 1.15, y: 6.5, stage: 1, months: [0] },
 	{ id: 'heart-balloon', kindId: 'heart-balloon', x: 1.2, y: 6.15, stage: 1, months: [1] },
 	{ id: 'tulips', kindId: 'tulips', x: 1.15, y: 6.3, stage: 1, months: [2, 3, 4] },
@@ -88,6 +88,16 @@ export const ROOM_PLACEMENTS: RoomPlacement[] = [
 	{ id: 'sunflower', kindId: 'sunflower', x: 1.2, y: 6.0, stage: 1, months: [8] },
 	{ id: 'pumpkin', kindId: 'pumpkin', x: 1.05, y: 5.95, stage: 1, months: [9, 10] },
 	{ id: 'pine', kindId: 'pine', x: 1.0, y: 5.85, stage: 1, months: [11] },
+	// Two more visitors per season, in their own spots: by the nightstand (bottom edge
+	// at y 3.5) and beside the crate (bottom edge at y ~6.78).
+	{ id: 'snowman', kindId: 'snowman', x: 2.45, y: 2.78, stage: 1, months: [11, 0, 1] },
+	{ id: 'firewood', kindId: 'firewood', x: 8.45, y: 6.32, stage: 1, months: [11, 0, 1] },
+	{ id: 'rain-boots', kindId: 'rain-boots', x: 2.4, y: 3.01, stage: 1, months: [2, 3, 4] },
+	{ id: 'watering-can', kindId: 'watering-can', x: 8.45, y: 6.29, stage: 1, months: [2, 3, 4] },
+	{ id: 'fan', kindId: 'fan', x: 2.45, y: 2.73, stage: 1, months: [5, 6, 7] },
+	{ id: 'lemonade', kindId: 'lemonade', x: 8.5, y: 6.12, stage: 1, months: [5, 6, 7] },
+	{ id: 'gourds', kindId: 'gourds', x: 2.4, y: 3.1, stage: 1, months: [8, 9, 10] },
+	{ id: 'apple-basket', kindId: 'apple-basket', x: 8.45, y: 6.3, stage: 1, months: [8, 9, 10] },
 
 	// Level decor: one piece per level once the room is complete (see DECOR_ORDER).
 	{ id: 'mug', kindId: 'mug', x: 8.35, y: 1.5, stage: 6, level: 9 },
