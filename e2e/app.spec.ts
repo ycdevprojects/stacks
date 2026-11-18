@@ -226,3 +226,10 @@ test('tapping a room piece offers its styles', async ({ page }) => {
 		'true'
 	);
 });
+
+test('petting an animal floats a heart', async ({ page }) => {
+	await seedFinishedRoom(page);
+	await page.locator('[data-test="lofi-item-cat"] > span').click();
+	await expect(page.locator('[data-test="lofi-item-cat"] .lofi-heart')).toBeVisible();
+	await expect(page.getByRole('status')).toContainText('Cat');
+});
