@@ -80,7 +80,12 @@ export const ROOM_PLACEMENTS: RoomPlacement[] = [
 	{ id: 'trophy-silver', kindId: 'trophy-silver', x: 2.64, y: 0.58, stage: 1, streak: 30 },
 	{ id: 'trophy-gold', kindId: 'trophy-gold', x: 2.98, y: 0.58, stage: 1, streak: 100 },
 
-	// Seasonal: share one corner, never at the same time.
+	// Seasonal: one visitor every month, sharing one corner (months never overlap).
+	{ id: 'snow-globe', kindId: 'snow-globe', x: 1.15, y: 6.5, stage: 1, months: [0] },
+	{ id: 'heart-balloon', kindId: 'heart-balloon', x: 1.2, y: 6.15, stage: 1, months: [1] },
+	{ id: 'tulips', kindId: 'tulips', x: 1.15, y: 6.3, stage: 1, months: [2, 3, 4] },
+	{ id: 'beach-ball', kindId: 'beach-ball', x: 1.1, y: 6.45, stage: 1, months: [5, 6, 7] },
+	{ id: 'sunflower', kindId: 'sunflower', x: 1.2, y: 6.0, stage: 1, months: [8] },
 	{ id: 'pumpkin', kindId: 'pumpkin', x: 1.05, y: 5.95, stage: 1, months: [9, 10] },
 	{ id: 'pine', kindId: 'pine', x: 1.0, y: 5.85, stage: 1, months: [11] },
 

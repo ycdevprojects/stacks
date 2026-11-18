@@ -38,6 +38,11 @@ import cactusImg from '$lib/assets/room/decor/cactus.png';
 import recordPlayerImg from '$lib/assets/room/decor/record-player.png';
 import pumpkinImg from '$lib/assets/room/decor/pumpkin.png';
 import pineImg from '$lib/assets/room/decor/pine.png';
+import snowGlobeImg from '$lib/assets/room/decor/snow-globe.png';
+import heartBalloonImg from '$lib/assets/room/decor/heart-balloon.png';
+import tulipsImg from '$lib/assets/room/decor/tulips.png';
+import beachBallImg from '$lib/assets/room/decor/beach-ball.png';
+import sunflowerImg from '$lib/assets/room/decor/sunflower.png';
 import trophyShelfImg from '$lib/assets/room/decor/trophy-shelf.png';
 import trophyBronzeImg from '$lib/assets/room/decor/trophy-bronze.png';
 import trophySilverImg from '$lib/assets/room/decor/trophy-silver.png';
@@ -433,6 +438,56 @@ export const ITEM_KINDS = {
 	},
 
 	// ---- Seasonal ----
+	'snow-globe': {
+		id: 'snow-globe',
+		label: 'Snow globe',
+		sprite: snowGlobeImg,
+		spritePx: { w: 12, h: 12 },
+		footprintW: 0.6,
+		zone: 'floor',
+		category: 'decor',
+		alt: 'Snow globe with a tiny tree inside'
+	},
+	'heart-balloon': {
+		id: 'heart-balloon',
+		label: 'Heart balloon',
+		sprite: heartBalloonImg,
+		spritePx: { w: 9, h: 17 },
+		footprintW: 0.5,
+		zone: 'floor',
+		category: 'decor',
+		alt: 'Red heart balloon tied to a weight'
+	},
+	tulips: {
+		id: 'tulips',
+		label: 'Tulips',
+		sprite: tulipsImg,
+		spritePx: { w: 9, h: 12 },
+		footprintW: 0.6,
+		zone: 'floor',
+		category: 'plant',
+		alt: 'Spring tulips in a teal pot'
+	},
+	'beach-ball': {
+		id: 'beach-ball',
+		label: 'Beach ball',
+		sprite: beachBallImg,
+		spritePx: { w: 12, h: 12 },
+		footprintW: 0.65,
+		zone: 'floor',
+		category: 'decor',
+		alt: 'Striped beach ball'
+	},
+	sunflower: {
+		id: 'sunflower',
+		label: 'Sunflower',
+		sprite: sunflowerImg,
+		spritePx: { w: 8, h: 18 },
+		footprintW: 0.5,
+		zone: 'floor',
+		category: 'plant',
+		alt: 'Tall sunflower in a pot'
+	},
 	pumpkin: {
 		id: 'pumpkin',
 		label: 'Pumpkin',

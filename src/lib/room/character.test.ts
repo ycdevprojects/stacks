@@ -12,7 +12,10 @@ const ctx = (stage: number, extra: Partial<RoomContext> = {}): RoomContext => ({
 });
 // Everything unlocked, in a month with a seasonal piece out.
 const FULL = ctx(MAX_STAGE, { level: 99, bestStreak: 999, month: 11 });
-const CONTEXTS = [1, 2, 3, 4, 5, 6].map((s) => ctx(s)).concat([FULL, ctx(1, { month: 10, bestStreak: 100 })]);
+// Every stage, plus a full room and a stage-1 room in every month (each brings a different seasonal piece).
+const CONTEXTS = [1, 2, 3, 4, 5, 6]
+	.map((s) => ctx(s))
+	.concat(Array.from({ length: 12 }, (_, month) => [{ ...FULL, month }, ctx(1, { month, bestStreak: 100 })]).flat());
 
 const day = { period: 'day' as const, sleepy: false };
 const night = { period: 'night' as const, sleepy: false };

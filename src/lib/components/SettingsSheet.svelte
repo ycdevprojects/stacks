@@ -13,6 +13,7 @@
 	} from '$lib/services/reminders';
 	import { showToast } from '$lib/stores/toast.svelte';
 	import { today } from '$lib/utils/helpers';
+	import { isNative, saveTextFile } from '$lib/services/native';
 
 	let { open = $bindable(false) }: { open?: boolean } = $props();
 
@@ -37,18 +38,15 @@
 		if (notifyOn) showToast('success', 'Reminders on', 'While Stackr is open or in the background', '🔔');
 	}
 
-	function saveFile(contents: string, type: string, filename: string) {
-		const url = URL.createObjectURL(new Blob([contents], { type }));
-		const a = document.createElement('a');
-		a.href = url;
-		a.download = filename;
-		a.click();
-		setTimeout(() => URL.revokeObjectURL(url), 1000);
-	}
 
-	function addToCalendar() {
-		saveFile(buildCalendar(app.stacks, app.habits, app.today, location.origin), 'text/calendar', 'stackr-reminders.ics');
-		showToast('success', 'Calendar file saved', 'Open it to add your reminders', '📅');
+	async function addToCalendar() {
+		try {
+			const ics = buildCalendar(app.stacks, app.habits, app.today, isNative() ? '' : location.origin);
+			await saveTextFile(ics, 'text/calendar', 'stackr-reminders.ics');
+			if (!isNative()) showToast('success', 'Calendar file saved', 'Open it to add your reminders', '📅');
+		} catch {
+			// share sheet dismissed
+		}
 	}
 
 	$effect(() => {
@@ -60,9 +58,13 @@
 		}
 	});
 
-	function download() {
-		saveFile(JSON.stringify(exportBackup(), null, 2), 'application/json', `stackr-backup-${today()}.json`);
-		showToast('success', 'Backup saved', 'Keep it somewhere safe', '💾');
+	async function download() {
+		try {
+			await saveTextFile(JSON.stringify(exportBackup(), null, 2), 'application/json', `stackr-backup-${today()}.json`);
+			if (!isNative()) showToast('success', 'Backup saved', 'Keep it somewhere safe', '💾');
+		} catch {
+			// share sheet dismissed
+		}
 	}
 
 	async function pickFile(e: Event) {
@@ -185,5 +187,7 @@
 		{/if}
 	</div>
 
-	<p class="mt-6 text-center text-xs text-slate-600">Stackr · works offline · install it from your browser’s share menu</p>
+	{#if !isNative()}
+		<p class="mt-6 text-center text-xs text-slate-600">Stackr · works offline · install it from your browser’s share menu</p>
+	{/if}
 </Sheet>

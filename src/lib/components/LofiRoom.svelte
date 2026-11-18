@@ -104,9 +104,18 @@
 		show({ id: item.id, title: kind.label, detail: rewardOf(item), styleable, ...at }, styleable ? 4000 : 2800);
 	}
 
+	function openStyle() {
+		// Read the id before clearing the tip: everything derived from `selected` goes null with it.
+		const id = selected?.id;
+		clearTimeout(hideTimer);
+		selected = null;
+		if (id) onstyle?.(id);
+	}
+
 	// ---- Lighting ----
 	const isNight = $derived(mood.period === 'night');
 	const isWinter = $derived([11, 0, 1].includes(ctx.month));
+	const isAutumn = $derived([9, 10].includes(ctx.month));
 	const hasStringLights = $derived(ctx.stage >= 6);
 	const lamps = $derived([
 		{ id: 'lamp', x: LAMP_SPOT.x, y: LAMP_SPOT.y, size: 1 },
@@ -226,6 +235,15 @@
 					aria-hidden="true"
 				></div>
 			{/each}
+		{:else if isAutumn && !isNight}
+			<div
+				class="lofi-leaves"
+				style:left={pctX(WINDOW_SPOT.x + 0.15)}
+				style:top={pctY(WINDOW_SPOT.y + 0.15)}
+				style:width={pctX(WINDOW_SPOT.w - 0.3)}
+				style:height={pctY(WINDOW_SPOT.h - 0.275)}
+				aria-hidden="true"
+			></div>
 		{:else if isNight}
 			{#each ['a', 'b'] as layer (layer)}
 				<div
@@ -259,14 +277,11 @@
 				<span class="block font-semibold">{selected.title}</span>
 				<span class="block text-[11px] opacity-75">{selected.detail}</span>
 				{#if selected.styleable}
-					{@const id = selected.id}
 					<button
 						type="button"
 						class="mt-1.5 rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] font-semibold active:bg-white/25"
-						onclick={() => {
-							selected = null;
-							onstyle?.(id);
-						}}>Change style</button
+						data-test="change-style"
+						onclick={openStyle}>Change style</button
 					>
 				{/if}
 			</div>
@@ -426,6 +441,28 @@
 		background-position: 3px 4px;
 		opacity: 0.6;
 		animation: lofi-snow-b 4s linear infinite;
+	}
+	.lofi-leaves {
+		position: absolute;
+		pointer-events: none;
+		overflow: hidden;
+		background-image:
+			radial-gradient(ellipse 1.6px 1px, #e46d3a 0 90%, transparent 100%),
+			radial-gradient(ellipse 1.6px 1px, #df9131 0 90%, transparent 100%);
+		background-size:
+			13px 17px,
+			17px 23px;
+		background-position:
+			0 0,
+			6px 9px;
+		animation: lofi-leaves 5s linear infinite;
+	}
+	@keyframes lofi-leaves {
+		to {
+			background-position:
+				-6px 17px,
+				4px 32px;
+		}
 	}
 	@keyframes lofi-snow-a {
 		to {

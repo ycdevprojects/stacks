@@ -31,7 +31,7 @@ alive, unlock badges, and furnish your room.
 - **Stats** — level and XP, current/best streak, a weekly bar chart, a 12-week heatmap and
   per-habit completion rates.
 - **Room** — a lofi pixel-art room that gains furniture across 6 stages, then keeps going: a new
-  decoration every level after that, streak trophies, seasonal visitors, and colors you pick for the
+  decoration every level after that, streak trophies, a seasonal visitor every month, and colors you pick for the
   rug, bed, sleeping bag and poster. A little roommate wanders between spots by day and sleeps at
   night. Tap anything (or anyone) to see what it is.
 - **Badges** — 20 badges for streaks, totals, levels, stacks and time of day, with progress.
@@ -59,6 +59,25 @@ npm run dev
 
 **Deploy:** import the repo in [Vercel](https://vercel.com). For another host, build with
 `ADAPTER=node npm run build` and run `node build`.
+
+## Mobile app (iOS and Android)
+
+The web app is the MVP; the native apps wrap the same code with [Capacitor](https://capacitorjs.com).
+`ios/` and `android/` are the native projects, and `capacitor.config.ts` configures them.
+
+```bash
+npm run ios       # build the app files, sync, and open Xcode
+npm run android   # same, opening Android Studio
+```
+
+Keep developing in the browser with `npm run dev`; run one of the commands above to try a change
+on a phone. Under the hood, `ADAPTER=static` builds plain files into `build/` and `cap sync` copies
+them and the plugins into both native projects.
+
+You'll need Xcode for iOS and Android Studio for Android. Device features go through
+`src/lib/services/native.ts`, which falls back to the web version in a browser: haptics, and
+saving files through the share sheet (backups and the calendar export). Still web-only:
+reminder notifications (the apps don't show the switch yet), app icons and the splash screen.
 
 ## How it works
 
@@ -102,8 +121,8 @@ After stage 6 the room keeps growing:
 | --- | --- |
 | A decoration per level (mug, cat, clock, beanbag, lamp, guitar, laptop, hanging plant, floor lamp, books, cactus, record player) | Levels 9–20 |
 | Bronze, silver and gold trophies on a wall shelf | Best streak of 7, 30 and 100 days |
-| A pumpkin | October–November |
-| A little pine with lights, and snow in the window | December (snow through February) |
+| A seasonal visitor: snow globe (Jan), heart balloon (Feb), tulips (Mar–May), beach ball (Jun–Aug), sunflower (Sep), pumpkin (Oct–Nov), little pine with lights (Dec) | Every month |
+| Snow in the window (Dec–Feb), falling leaves by day (Oct–Nov) | By season |
 
 Styles are saved per piece and can be changed any time by tapping the piece.
 
@@ -131,7 +150,7 @@ src/
 │   ├── assets/room/        CC0 pixel sprites + CREDITS.md
 │   ├── components/         Sheet, PageHeader, WeekStrip, ProgressRing, LofiRoom, Toast, …
 │   ├── room/               catalog, layout, placement engine, roommate, stage + mood math
-│   ├── services/           db.ts (IndexedDB), pwa.ts (service worker), reminders.ts
+│   ├── services/           db.ts (IndexedDB), pwa.ts (service worker), reminders.ts, native.ts
 │   ├── stores/             app.svelte.ts (state + actions), profile.ts (XP/badges), toast
 │   ├── types/              data model
 │   └── utils/              gamification, schedule, badges, templates, feedback, helpers

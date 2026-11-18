@@ -79,7 +79,12 @@
 	function unlockText(p: RoomPlacement): string {
 		if (p.level) return `Level ${p.level}`;
 		if (p.streak) return `${p.streak}-day`;
-		if (p.months) return p.months.map((m) => new Date(2026, m, 1).toLocaleDateString(undefined, { month: 'short' })).join('–');
+		if (p.months) {
+			const name = (m: number) => new Date(2026, m, 1).toLocaleDateString(undefined, { month: 'short' });
+			const first = p.months[0];
+			const last = p.months[p.months.length - 1];
+			return first === last ? name(first) : `${name(first)}–${name(last)}`;
+		}
 		return '';
 	}
 	const collected = $derived(collection.filter((c) => c.has && !c.p.months).length);
@@ -129,7 +134,11 @@
 	<LofiRoom {ctx} {mood} onstyle={openStyle} />
 </div>
 <p class="mt-2 text-center text-xs text-slate-500">
-	{mood.sleepy ? 'Your room is sleepy — check off a habit to wake it up.' : 'Tap anything in your room — or your roommate.'}
+	{mood.sleepy
+		? 'Your room is sleepy — check off a habit to wake it up.'
+		: mood.period === 'night'
+			? 'Your roommate is asleep until 6 AM. 🌙 Tap anything in your room.'
+			: 'Tap anything in your room — or your roommate.'}
 </p>
 
 {#if unstyled.length > 0}
@@ -210,7 +219,7 @@
 		</div>
 	{/each}
 </div>
-<p class="mt-2 px-1 text-[11px] text-slate-600">A new decoration every level after the room is complete; trophies for 7, 30 and 100-day streaks; seasonal visitors in autumn and December.</p>
+<p class="mt-2 px-1 text-[11px] text-slate-600">A new decoration every level after the room is complete; trophies for 7, 30 and 100-day streaks; and a seasonal visitor every month.</p>
 
 <!-- Badges -->
 <div id="badges" class="mt-7 mb-2 flex items-baseline justify-between px-1">

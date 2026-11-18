@@ -7,6 +7,7 @@
 import type { Habit, Stack } from '$lib/types';
 import { dueHabits } from '$lib/utils/schedule';
 import { addDays } from '$lib/utils/helpers';
+import { isNative } from './native';
 
 const ENABLED_KEY = 'stackr_reminders';
 
@@ -18,8 +19,9 @@ export function onRemindersChange(cb: () => void): () => void {
 }
 const changed = () => listeners.forEach((cb) => cb());
 
+/** Browser notifications. The native apps get on-device scheduled notifications instead (not built yet). */
 export function notificationsSupported(): boolean {
-	return typeof window !== 'undefined' && 'Notification' in window;
+	return typeof window !== 'undefined' && 'Notification' in window && !isNative();
 }
 
 export function remindersEnabled(): boolean {
@@ -212,7 +214,7 @@ export function buildCalendar(stacks: Stack[], habits: Habit[], today: string, o
 			'DURATION:PT5M',
 			days ? `RRULE:FREQ=WEEKLY;BYDAY=${days.map((d) => ICS_DAYS[d]).join(',')}` : 'RRULE:FREQ=DAILY',
 			`SUMMARY:${icsEscape(`${stack.icon} ${stack.name}`)}`,
-			`DESCRIPTION:${icsEscape(`${stack.trigger}, I will…\n${names}\n\n${origin}`)}`,
+			`DESCRIPTION:${icsEscape(`${stack.trigger}, I will…\n${names}${origin ? `\n\n${origin}` : ''}`)}`,
 			'TRANSP:TRANSPARENT',
 			'BEGIN:VALARM',
 			'ACTION:DISPLAY',
