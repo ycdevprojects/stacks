@@ -43,6 +43,14 @@ import heartBalloonImg from '$lib/assets/room/decor/heart-balloon.png';
 import tulipsImg from '$lib/assets/room/decor/tulips.png';
 import beachBallImg from '$lib/assets/room/decor/beach-ball.png';
 import sunflowerImg from '$lib/assets/room/decor/sunflower.png';
+import appleBasketImg from '$lib/assets/room/decor/apple-basket.png';
+import gourdsImg from '$lib/assets/room/decor/gourds.png';
+import snowmanImg from '$lib/assets/room/decor/snowman.png';
+import firewoodImg from '$lib/assets/room/decor/firewood.png';
+import rainBootsImg from '$lib/assets/room/decor/rain-boots.png';
+import wateringCanImg from '$lib/assets/room/decor/watering-can.png';
+import fanImg from '$lib/assets/room/decor/fan.png';
+import lemonadeImg from '$lib/assets/room/decor/lemonade.png';
 import trophyShelfImg from '$lib/assets/room/decor/trophy-shelf.png';
 import trophyBronzeImg from '$lib/assets/room/decor/trophy-bronze.png';
 import trophySilverImg from '$lib/assets/room/decor/trophy-silver.png';
@@ -438,6 +446,86 @@ export const ITEM_KINDS = {
 	},
 
 	// ---- Seasonal ----
+	snowman: {
+		id: 'snowman',
+		label: 'Snowman plush',
+		sprite: snowmanImg,
+		spritePx: { w: 10, h: 13 },
+		footprintW: 0.55,
+		zone: 'floor',
+		category: 'decor',
+		alt: 'Little snowman plush in a red hat and scarf'
+	},
+	firewood: {
+		id: 'firewood',
+		label: 'Firewood',
+		sprite: firewoodImg,
+		spritePx: { w: 14, h: 8 },
+		footprintW: 0.8,
+		zone: 'floor',
+		category: 'decor',
+		alt: 'A stack of firewood'
+	},
+	'rain-boots': {
+		id: 'rain-boots',
+		label: 'Rain boots',
+		sprite: rainBootsImg,
+		spritePx: { w: 12, h: 9 },
+		footprintW: 0.65,
+		zone: 'floor',
+		category: 'decor',
+		alt: 'Pair of yellow rain boots'
+	},
+	'watering-can': {
+		id: 'watering-can',
+		label: 'Watering can',
+		sprite: wateringCanImg,
+		spritePx: { w: 13, h: 8 },
+		footprintW: 0.8,
+		zone: 'floor',
+		category: 'decor',
+		alt: 'Teal watering can'
+	},
+	fan: {
+		id: 'fan',
+		label: 'Desk fan',
+		sprite: fanImg,
+		spritePx: { w: 10, h: 14 },
+		footprintW: 0.55,
+		zone: 'floor',
+		category: 'tech',
+		alt: 'Little electric fan'
+	},
+	lemonade: {
+		id: 'lemonade',
+		label: 'Lemonade',
+		sprite: lemonadeImg,
+		spritePx: { w: 10, h: 11 },
+		footprintW: 0.6,
+		zone: 'floor',
+		category: 'decor',
+		alt: 'Pitcher of lemonade on a tray'
+	},
+	'apple-basket': {
+		id: 'apple-basket',
+		label: 'Apple basket',
+		sprite: appleBasketImg,
+		spritePx: { w: 14, h: 9 },
+		footprintW: 0.75,
+		zone: 'floor',
+		category: 'decor',
+		alt: 'Woven basket of red and green apples'
+	},
+	gourds: {
+		id: 'gourds',
+		label: 'Gourds',
+		sprite: gourdsImg,
+		spritePx: { w: 14, h: 8 },
+		footprintW: 0.7,
+		zone: 'floor',
+		category: 'decor',
+		alt: 'A little pile of autumn gourds'
+	},
 	'snow-globe': {
 		id: 'snow-globe',
 		label: 'Snow globe',

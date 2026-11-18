@@ -31,7 +31,7 @@ alive, unlock badges, and furnish your room.
 - **Stats** — level and XP, current/best streak, a weekly bar chart, a 12-week heatmap and
   per-habit completion rates.
 - **Room** — a lofi pixel-art room that gains furniture across 6 stages, then keeps going: a new
-  decoration every level after that, streak trophies, a seasonal visitor every month, and colors you pick for the
+  decoration every level after that, streak trophies, seasonal visitors all year, and colors you pick for the
   rug, bed, sleeping bag and poster. A little roommate wanders between spots by day and sleeps at
   night. Tap anything (or anyone) to see what it is.
 - **Badges** — 20 badges for streaks, totals, levels, stacks and time of day, with progress.
@@ -121,7 +121,7 @@ After stage 6 the room keeps growing:
 | --- | --- |
 | A decoration per level (mug, cat, clock, beanbag, lamp, guitar, laptop, hanging plant, floor lamp, books, cactus, record player) | Levels 9–20 |
 | Bronze, silver and gold trophies on a wall shelf | Best streak of 7, 30 and 100 days |
-| A seasonal visitor: snow globe (Jan), heart balloon (Feb), tulips (Mar–May), beach ball (Jun–Aug), sunflower (Sep), pumpkin (Oct–Nov), little pine with lights (Dec) | Every month |
+| Three seasonal visitors at a time. Winter: pine (Dec), snow globe (Jan) or heart balloon (Feb), plus a snowman plush and firewood. Spring: tulips, rain boots, a watering can. Summer: beach ball, desk fan, lemonade. Autumn: sunflower (Sep) or pumpkin (Oct–Nov), plus gourds and an apple basket | All year |
 | Snow in the window (Dec–Feb), falling leaves by day (Oct–Nov) | By season |
 
 Styles are saved per piece and can be changed any time by tapping the piece.
