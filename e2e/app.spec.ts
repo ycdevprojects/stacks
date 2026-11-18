@@ -88,9 +88,9 @@ test('deleting a stack removes it and its habits for good', async ({ page }) => 
 test('tab bar reaches every screen', async ({ page }) => {
 	await openApp(page);
 	for (const [tab, url, heading] of [
+		['Room', /\/room$/, 'Your Room'],
 		['Stacks', /\/stacks$/, 'Stacks'],
 		['Stats', /\/stats$/, 'Stats'],
-		['Room', /\/room$/, 'Your Room'],
 		['Today', /\/$/, 'Today']
 	] as const) {
 		await page.getByRole('link', { name: tab, exact: true }).click();
@@ -104,7 +104,10 @@ test('room shows furniture and badges, and old links redirect', async ({ page })
 	await expect(page).toHaveURL(/\/room$/);
 	await expect(page.getByTestId('lofi-room-hero')).toBeVisible();
 	await expect(page.getByText('Next: Stage 2 · First Desk')).toBeVisible();
-	await expect(page.getByRole('heading', { name: 'Badges' })).toBeVisible();
+	await page.getByRole('tab', { name: /Badges/ }).click();
+	await expect(page).toHaveURL(/tab=badges/);
+	await expect(page.getByRole('button', { name: /First Step/ })).toBeVisible();
+	await page.getByRole('tab', { name: /Progress/ }).click();
 
 	await page.getByTestId('lofi-item-floorbed').click();
 	await expect(page.getByRole('status')).toContainText('Sleeping bag');

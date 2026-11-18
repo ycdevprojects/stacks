@@ -1,6 +1,8 @@
 <script lang="ts">
 	import type { BadgeDefinition } from '$lib/types';
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
+	import { replaceState } from '$app/navigation';
 	import { getAppState, setRoomStyle } from '$lib/stores/app.svelte';
 	import { ROOM_PLACEMENTS, DECOR_ORDER, isVisible, type RoomContext, type RoomPlacement } from '$lib/room/layout';
 	import { kindOf, spriteFor } from '$lib/room/catalog';
@@ -117,6 +119,26 @@
 
 	const sortedBadges = $derived([...BADGES].sort((a, b) => Number(unlocked.has(b.key)) - Number(unlocked.has(a.key))));
 
+	// ---- Sections under the room ----
+	type Tab = 'progress' | 'collection' | 'badges';
+	const initial = page.url.searchParams.get('tab');
+	let tab = $state<Tab>(initial === 'collection' || initial === 'badges' ? initial : 'progress');
+	const SECTIONS = $derived<{ id: Tab; label: string; count?: string }[]>([
+		{ id: 'progress', label: 'Progress' },
+		{ id: 'collection', label: 'Collection', count: `${collected}/${collectible}` },
+		{ id: 'badges', label: 'Badges', count: `${unlocked.size}/${BADGES.length}` }
+	]);
+	function selectTab(t: Tab) {
+		if (t === tab) return;
+		haptic(5);
+		tab = t;
+		// Keep the choice in the URL so Back and reloads land on the same section.
+		const url = new URL(page.url);
+		if (t === 'progress') url.searchParams.delete('tab');
+		else url.searchParams.set('tab', t);
+		replaceState(url, {});
+	}
+
 	let openBadge = $state<BadgeDefinition | null>(null);
 	let showBadge = $state(false);
 	function viewBadge(b: BadgeDefinition) {
@@ -130,8 +152,11 @@
 
 <PageHeader title="Your Room" eyebrow="Stage {stage} of {MAX_STAGE} · {STAGE_NAMES[stage - 1]}" />
 
-<div class="mx-auto max-w-[min(100%,56dvh)]">
-	<LofiRoom {ctx} {mood} onstyle={openStyle} />
+<!-- The room bleeds a little past the page margins so it's as big as the screen allows. -->
+<div class="-mx-2 sm:mx-0">
+	<div class="mx-auto max-w-[min(100%,62dvh)]">
+		<LofiRoom {ctx} {mood} onstyle={openStyle} />
+	</div>
 </div>
 <p class="mt-2 text-center text-xs text-slate-500">
 	{mood.sleepy
@@ -154,118 +179,126 @@
 	</button>
 {/if}
 
-<!-- Next unlock -->
-<section class="card mt-5 p-4" data-test="stage-progress">
-	{#if bar.nextAt !== null}
-		<div class="flex items-start justify-between gap-3">
-			<div class="min-w-0">
-				<p class="text-[13px] font-medium text-violet-300">Next: Stage {stage + 1} · {STAGE_NAMES[stage]}</p>
-				<p class="mt-0.5 text-[15px] text-white">{STAGE_UNLOCKS[stage]}</p>
-			</div>
-			<span class="shrink-0 rounded-full bg-violet-500/15 px-2.5 py-1 text-xs font-semibold text-violet-200 tabular-nums">
-				{(bar.nextAt - xp).toLocaleString()} XP
-			</span>
-		</div>
-		<div class="mt-3 h-2 overflow-hidden rounded-full bg-violet-950/80">
-			<div class="h-full rounded-full bg-gradient-to-r from-amber-400 to-violet-500 transition-[width] duration-500" style:width="{bar.percent}%"></div>
-		</div>
-	{:else if nextDecor && decorBar}
-		{@const kind = kindOf(nextDecor.kindId)}
-		<div class="flex items-start justify-between gap-3">
-			<div class="flex min-w-0 items-center gap-3">
-				<span class="grid size-11 shrink-0 place-items-center rounded-xl bg-slate-800/80">
-					<img src={kind.sprite} alt="" class="max-h-7 max-w-7 opacity-30 brightness-0 invert [image-rendering:pixelated]" />
-				</span>
-				<div class="min-w-0">
-					<p class="text-[13px] font-medium text-violet-300">Next decoration · Level {nextDecor.level}</p>
-					<p class="mt-0.5 text-[15px] text-white">A surprise for your room</p>
-				</div>
-			</div>
-			<span class="shrink-0 rounded-full bg-violet-500/15 px-2.5 py-1 text-xs font-semibold text-violet-200 tabular-nums">
-				{decorBar.left.toLocaleString()} XP
-			</span>
-		</div>
-		<div class="mt-3 h-2 overflow-hidden rounded-full bg-violet-950/80">
-			<div class="h-full rounded-full bg-gradient-to-r from-amber-400 to-violet-500 transition-[width] duration-500" style:width="{decorBar.percent}%"></div>
-		</div>
-	{:else}
-		<p class="text-[15px] font-semibold text-white">Your room is complete ✨</p>
-		<p class="mt-0.5 text-[13px] text-slate-400">Every piece and decoration is unlocked. Keep your streak going for trophies.</p>
-	{/if}
-	<p class="mt-3 text-xs text-slate-500" data-test="room-stats">
-		⭐ {xp.toLocaleString()} XP · +{XP_PER_HABIT} per habit, +{XP_STACK_BONUS} for a full stack, bonus for streaks
-	</p>
-</section>
-
-<!-- Collection -->
-<div class="mt-7 mb-2 flex items-baseline justify-between px-1">
-	<h2 class="section-title mb-0">Collection</h2>
-	<span class="text-[13px] text-slate-500">{collected} of {collectible}</span>
-</div>
-<div class="card grid grid-cols-4 gap-y-4 p-4" data-test="collection">
-	{#each collection as { p, kind, has } (p.id)}
-		<div class="flex flex-col items-center gap-1.5" title={kind.label}>
-			<span class="grid size-14 place-items-center rounded-2xl {has ? 'bg-slate-800' : 'bg-slate-800/50'}">
-				<img
-					src={spriteFor(kind, app.profile?.room_styles?.[p.id])}
-					alt=""
-					class="max-h-9 max-w-9 [image-rendering:pixelated] {has ? '' : 'opacity-25 brightness-0 invert'}"
-					style:width="{Math.min(36, kind.spritePx.w * 2.5)}px"
-				/>
-			</span>
-			<span class="line-clamp-1 text-center text-[11px] leading-tight {has ? 'text-slate-200' : 'text-slate-500'}">
-				{has ? kind.label : unlockText(p)}
-			</span>
-		</div>
-	{/each}
-</div>
-<p class="mt-2 px-1 text-[11px] text-slate-600">A new decoration every level after the room is complete; trophies for 7, 30 and 100-day streaks; and seasonal visitors all year.</p>
-
-<!-- Badges -->
-<div id="badges" class="mt-7 mb-2 flex items-baseline justify-between px-1">
-	<h2 class="section-title mb-0">Badges</h2>
-	<span class="text-[13px] text-slate-500">{unlocked.size} of {BADGES.length}</span>
-</div>
-<div class="card grid grid-cols-4 gap-y-4 p-4">
-	{#each sortedBadges as badge (badge.key)}
-		{@const has = unlocked.has(badge.key)}
-		<button type="button" onclick={() => viewBadge(badge)} class="pressable flex flex-col items-center gap-1.5">
-			<span
-				class="relative grid size-14 place-items-center rounded-2xl text-2xl {has
-					? 'bg-gradient-to-br from-amber-400/25 to-violet-500/25 ring-1 ring-amber-300/30'
-					: 'bg-slate-800/70 grayscale'}"
-			>
-				<span class={has ? '' : 'opacity-30'}>{badge.icon}</span>
-				{#if !has}
-					<Icon name="lock" class="absolute -right-1 -bottom-1 size-5 rounded-full bg-slate-900 p-0.5 text-slate-500" strokeWidth={2} />
-				{/if}
-			</span>
-			<span class="line-clamp-2 text-center text-[11px] leading-tight {has ? 'text-slate-200' : 'text-slate-500'}">{badge.name}</span>
+<div class="mt-5 mb-4 grid grid-cols-3 gap-1 rounded-2xl bg-slate-900 p-1 ring-1 ring-white/5" role="tablist" aria-label="Room sections">
+	{#each SECTIONS as section (section.id)}
+		<button
+			type="button"
+			role="tab"
+			aria-selected={tab === section.id}
+			onclick={() => selectTab(section.id)}
+			class="rounded-xl py-2 text-[13px] font-semibold transition-colors {tab === section.id
+				? 'bg-slate-700 text-white shadow'
+				: 'text-slate-400 active:text-white'}"
+		>
+			{section.label}{#if section.count}<span class="ml-1 font-medium text-slate-400 tabular-nums">{section.count}</span>{/if}
 		</button>
 	{/each}
 </div>
 
-<!-- Stage track -->
-<h2 class="section-title mt-7">Room stages</h2>
-<ol class="card divide-y divide-white/5 overflow-hidden">
-	{#each STAGE_NAMES as name, i (name)}
-		{@const reached = stage > i}
-		<li class="flex items-center gap-3 px-4 py-3">
-			<span
-				class="grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold {reached
-					? 'bg-violet-500 text-white'
-					: 'bg-slate-800 text-slate-500'}"
-			>
-				{#if reached}<Icon name="check" class="size-4" strokeWidth={3} />{:else}{i + 1}{/if}
-			</span>
-			<span class="min-w-0 flex-1">
-				<span class="block text-[15px] {reached ? 'text-white' : 'text-slate-400'}">{name}</span>
-				<span class="block truncate text-xs text-slate-500">{STAGE_UNLOCKS[i]}</span>
-			</span>
-			<span class="shrink-0 text-xs text-slate-500 tabular-nums">{STAGE_THRESHOLDS[i].toLocaleString()} XP</span>
-		</li>
-	{/each}
-</ol>
+{#if tab === 'progress'}
+	<!-- Next unlock -->
+	<section class="card p-4" data-test="stage-progress">
+		{#if bar.nextAt !== null}
+			<div class="flex items-start justify-between gap-3">
+				<div class="min-w-0">
+					<p class="text-[13px] font-medium text-violet-300">Next: Stage {stage + 1} · {STAGE_NAMES[stage]}</p>
+					<p class="mt-0.5 text-[15px] text-white">{STAGE_UNLOCKS[stage]}</p>
+				</div>
+				<span class="shrink-0 rounded-full bg-violet-500/15 px-2.5 py-1 text-xs font-semibold text-violet-200 tabular-nums">
+					{(bar.nextAt - xp).toLocaleString()} XP
+				</span>
+			</div>
+			<div class="mt-3 h-2 overflow-hidden rounded-full bg-violet-950/80">
+				<div class="h-full rounded-full bg-gradient-to-r from-amber-400 to-violet-500 transition-[width] duration-500" style:width="{bar.percent}%"></div>
+			</div>
+		{:else if nextDecor && decorBar}
+			{@const kind = kindOf(nextDecor.kindId)}
+			<div class="flex items-start justify-between gap-3">
+				<div class="flex min-w-0 items-center gap-3">
+					<span class="grid size-11 shrink-0 place-items-center rounded-xl bg-slate-800/80">
+						<img src={kind.sprite} alt="" class="max-h-7 max-w-7 opacity-30 brightness-0 invert [image-rendering:pixelated]" />
+					</span>
+					<div class="min-w-0">
+						<p class="text-[13px] font-medium text-violet-300">Next decoration · Level {nextDecor.level}</p>
+						<p class="mt-0.5 text-[15px] text-white">A surprise for your room</p>
+					</div>
+				</div>
+				<span class="shrink-0 rounded-full bg-violet-500/15 px-2.5 py-1 text-xs font-semibold text-violet-200 tabular-nums">
+					{decorBar.left.toLocaleString()} XP
+				</span>
+			</div>
+			<div class="mt-3 h-2 overflow-hidden rounded-full bg-violet-950/80">
+				<div class="h-full rounded-full bg-gradient-to-r from-amber-400 to-violet-500 transition-[width] duration-500" style:width="{decorBar.percent}%"></div>
+			</div>
+		{:else}
+			<p class="text-[15px] font-semibold text-white">Your room is complete ✨</p>
+			<p class="mt-0.5 text-[13px] text-slate-400">Every piece and decoration is unlocked. Keep your streak going for trophies.</p>
+		{/if}
+		<p class="mt-3 text-xs text-slate-500" data-test="room-stats">
+			⭐ {xp.toLocaleString()} XP · +{XP_PER_HABIT} per habit, +{XP_STACK_BONUS} for a full stack, bonus for streaks
+		</p>
+	</section>
+
+	<!-- Stage track -->
+	<h2 class="section-title mt-6">Room stages</h2>
+	<ol class="card divide-y divide-white/5 overflow-hidden">
+		{#each STAGE_NAMES as name, i (name)}
+			{@const reached = stage > i}
+			<li class="flex items-center gap-3 px-4 py-3">
+				<span
+					class="grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold {reached
+						? 'bg-violet-500 text-white'
+						: 'bg-slate-800 text-slate-500'}"
+				>
+					{#if reached}<Icon name="check" class="size-4" strokeWidth={3} />{:else}{i + 1}{/if}
+				</span>
+				<span class="min-w-0 flex-1">
+					<span class="block text-[15px] {reached ? 'text-white' : 'text-slate-400'}">{name}</span>
+					<span class="block truncate text-xs text-slate-500">{STAGE_UNLOCKS[i]}</span>
+				</span>
+				<span class="shrink-0 text-xs text-slate-500 tabular-nums">{STAGE_THRESHOLDS[i].toLocaleString()} XP</span>
+			</li>
+		{/each}
+	</ol>
+{:else if tab === 'collection'}
+	<div class="card grid grid-cols-4 gap-y-4 p-4" data-test="collection">
+		{#each collection as { p, kind, has } (p.id)}
+			<div class="flex flex-col items-center gap-1.5" title={kind.label}>
+				<span class="grid size-14 place-items-center rounded-2xl {has ? 'bg-slate-800' : 'bg-slate-800/50'}">
+					<img
+						src={spriteFor(kind, app.profile?.room_styles?.[p.id])}
+						alt=""
+						class="max-h-9 max-w-9 [image-rendering:pixelated] {has ? '' : 'opacity-25 brightness-0 invert'}"
+						style:width="{Math.min(36, kind.spritePx.w * 2.5)}px"
+					/>
+				</span>
+				<span class="line-clamp-1 text-center text-[11px] leading-tight {has ? 'text-slate-200' : 'text-slate-500'}">
+					{has ? kind.label : unlockText(p)}
+				</span>
+			</div>
+		{/each}
+	</div>
+	<p class="mt-2 px-1 text-[11px] text-slate-600">A new decoration every level after the room is complete; trophies for 7, 30 and 100-day streaks; and seasonal visitors all year.</p>
+{:else}
+	<div class="card grid grid-cols-4 gap-y-4 p-4">
+		{#each sortedBadges as badge (badge.key)}
+			{@const has = unlocked.has(badge.key)}
+			<button type="button" onclick={() => viewBadge(badge)} class="pressable flex flex-col items-center gap-1.5">
+				<span
+					class="relative grid size-14 place-items-center rounded-2xl text-2xl {has
+						? 'bg-gradient-to-br from-amber-400/25 to-violet-500/25 ring-1 ring-amber-300/30'
+						: 'bg-slate-800/70 grayscale'}"
+				>
+					<span class={has ? '' : 'opacity-30'}>{badge.icon}</span>
+					{#if !has}
+						<Icon name="lock" class="absolute -right-1 -bottom-1 size-5 rounded-full bg-slate-900 p-0.5 text-slate-500" strokeWidth={2} />
+					{/if}
+				</span>
+				<span class="line-clamp-2 text-center text-[11px] leading-tight {has ? 'text-slate-200' : 'text-slate-500'}">{badge.name}</span>
+			</button>
+		{/each}
+	</div>
+{/if}
 
 <Sheet bind:open={showStyle} title={styleTarget ? `Style your ${kindOf(styleTarget.kindId).label.toLowerCase()}` : 'Style'}>
 	{#if styleTarget}

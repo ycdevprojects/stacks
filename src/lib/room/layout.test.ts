@@ -4,7 +4,7 @@ import {
 	ROOM_PLACEMENTS,
 	ROOM_GRID,
 	LAMP_SPOT,
-	WINDOW_SPOT,
+	WINDOW_SPOTS,
 	DECOR_ORDER,
 	resolveItem,
 	isVisible,
@@ -88,7 +88,7 @@ describe('composed one-sprite objects', () => {
 		const windows = ROOM_PLACEMENTS.filter((p) => p.kindId === 'window');
 		expect(windows.map((p) => p.id).sort()).toEqual(['window', 'window-left']);
 		for (const w of windows) {
-			expect(w.y).toBe(0.08);
+			expect(w.y).toBe(0.05);
 			expect(w.y + footprintH(kindOf('window'))).toBeLessThanOrEqual(ROOM_GRID.wallRows);
 		}
 	});
@@ -113,11 +113,14 @@ describe('composed one-sprite objects', () => {
 		expect(overlaps(rectOf(pet!), rectOf(rug!))).toBe(true);
 	});
 
-	it('derives the lamp glow and night rain anchors from the placements', () => {
+	it('derives the lamp glow and window weather anchors from the placements', () => {
 		// raw floats; the component rounds at the 4dp CSS boundary
 		expect(LAMP_SPOT.x).toBeCloseTo(9.095, 12);
 		expect(LAMP_SPOT.y).toBeCloseTo(4.275, 12);
-		expect(WINDOW_SPOT).toEqual({ x: 6.95, y: 0.08, w: 0.85, h: 0.85 });
+		expect(WINDOW_SPOTS).toEqual([
+			{ x: 0.2, y: 0.05, w: 1, h: 1 },
+			{ x: 6.85, y: 0.05, w: 1, h: 1 }
+		]);
 	});
 });
 describe('rewards beyond the stages', () => {

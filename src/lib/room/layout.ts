@@ -55,12 +55,12 @@ export interface RoomPlacement {
  * Rug is a composed 6-tile x 5-tile sprite; bookshelf is a composed 3-tile strip.
  */
 export const ROOM_PLACEMENTS: RoomPlacement[] = [
-	{ id: 'window', kindId: 'window', x: 6.95, y: 0.08, stage: 1 },
-	{ id: 'window-left', kindId: 'window', x: 0.3, y: 0.08, stage: 1 },
+	{ id: 'window', kindId: 'window', x: 6.85, y: 0.05, stage: 1 },
+	{ id: 'window-left', kindId: 'window', x: 0.2, y: 0.05, stage: 1 },
 	{ id: 'shelf-media', kindId: 'shelf-media', x: 8.9, y: 0.15, stage: 6 },
 	{ id: 'speaker', kindId: 'speaker', x: 9.05, y: 0.18, stage: 6 },
 	{ id: 'bookshelf', kindId: 'bookshelf', x: 4.2, y: 0.62, stage: 5 },
-	{ id: 'poster', kindId: 'poster', x: 1.25, y: 0.12, stage: 3 },
+	{ id: 'poster', kindId: 'poster', x: 1.32, y: 0.12, stage: 3 },
 	{ id: 'lamp', kindId: 'lamp', x: 8.72, y: 3.9, stage: 1 },
 	{ id: 'desk', kindId: 'desk', x: 6.4, y: 1.55, stage: 2 },
 	{ id: 'chair', kindId: 'chair', x: 7.25, y: 2.7, stage: 2 },
@@ -216,8 +216,8 @@ function rectOfId(id: string): { x: number; y: number; w: number; h: number } {
 /** Where the lamp (and its glow) stands — derived from the `lamp` placement. */
 export const LAMP_SPOT = centerOf('lamp');
 
-/** The window (source of the night rain layer) — derived from the `window` placement. */
-export const WINDOW_SPOT = rectOfId('window');
+/** Both windows — where the weather (rain, snow, leaves) shows. */
+export const WINDOW_SPOTS = [rectOfId('window-left'), rectOfId('window')];
 /** Render-ready visible items for a room context, in painter order, in the chosen styles. */
 export function visibleItems(ctx: RoomContext): RoomItem[] {
 	return ROOM_PLACEMENTS.filter((p) => isVisible(p, ctx)).map((p) => resolveItem(p, ctx.styles));
