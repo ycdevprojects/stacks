@@ -7,11 +7,12 @@ export default defineConfig({
 	fullyParallel: true,
 	retries: 1,
 	workers: process.env.CI ? 1 : undefined,
-	reporter: 'html',
+	reporter: process.env.CI ? 'github' : 'list',
 	use: {
 		baseURL: 'http://localhost:4173',
 		trace: 'on-first-retry',
-		screenshot: 'on',
+		testIdAttribute: 'data-test',
+		screenshot: 'only-on-failure',
 		video: 'retain-on-failure',
 	},
 	webServer: {

@@ -1,85 +1,72 @@
-// Deterministic docs-render generator for docs/screenshots/ (PR #2, 2026-10-08).
-// Produces the four committed hero renders:
-//   after-*  — stage 1 (Floor Days, xp 0, DAY, hour 12): the size-comparison pair
-//   stage4-* — stage 4 (Proper Pad, xp 900, NIGHT, hour 21): furniture + carpet pair
-// Usage: serve the node build on :4199 first (`ADAPTER=node npm run build && PORT=4199 node build`),
-// then `node scripts/screenshot-docs.mjs`. dsf 1, fullPage — matches the committed
-// renders' conventions.
+// Regenerates the README screenshots in docs/screenshots/.
+// Usage: serve a node build on :4199 first
+//   ADAPTER=node npm run build && PORT=4199 node build
+// then `node scripts/screenshot-docs.mjs`. Set PW_CHANNEL=chrome to use an
+// installed Chrome instead of Playwright's bundled Chromium.
 import { chromium } from '@playwright/test';
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:4199';
-const browser = await chromium.launch();
+const browser = await chromium.launch({ channel: process.env.PW_CHANNEL });
 
 const SHOTS = [
-	{ file: 'docs/screenshots/lofi-room-after-mobile-390x844.png', width: 390, height: 844, xp: 0, hour: 12 },
-	{ file: 'docs/screenshots/lofi-room-after-desktop-1280x900.png', width: 1280, height: 900, xp: 0, hour: 12 },
-	{ file: 'docs/screenshots/lofi-room-stage4-390x844.png', width: 390, height: 844, xp: 900, hour: 21 },
-	{ file: 'docs/screenshots/lofi-room-stage4-1280x900.png', width: 1280, height: 900, xp: 900, hour: 21 }
+	{ file: 'docs/screenshots/today-390x844.png', path: '/', xp: 920, hour: 9, done: ['h_m1'] },
+	{ file: 'docs/screenshots/room-stage1-390x844.png', path: '/room', xp: 40, hour: 12 },
+	{ file: 'docs/screenshots/room-stage4-night-390x844.png', path: '/room', xp: 900, hour: 21 },
+	{ file: 'docs/screenshots/room-stage6-390x844.png', path: '/room', xp: 2400, hour: 15 },
+	{ file: 'docs/screenshots/stats-390x844.png', path: '/stats', xp: 920, hour: 9 }
 ];
 
 for (const shot of SHOTS) {
-	const context = await browser.newContext({
-		viewport: { width: shot.width, height: shot.height },
-		deviceScaleFactor: 1
-	});
+	const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
 	const page = await context.newPage();
 
-	// First load boots the app: creates the local user id + DB stores
+	// Pin the clock (mood is hour-based) before the app boots.
+	const fixed = new Date();
+	fixed.setHours(shot.hour, 30, 0, 0);
+	await page.clock.setFixedTime(fixed);
+
+	// First load creates the local user id + database.
 	await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
-	await page.waitForFunction(
-		() => localStorage.getItem('stackr_local_user_id') !== null,
-		null,
-		{ timeout: 15000 }
-	);
+	await page.waitForFunction(() => localStorage.getItem('stackr_local_user_id') !== null, null, { timeout: 15000 });
 
-	await page.evaluate(async (xp) => {
+	await page.evaluate(async ({ xp, done }) => {
 		const uid = localStorage.getItem('stackr_local_user_id');
-		if (!uid) throw new Error('local user id missing');
-
 		const db = await new Promise((resolve, reject) => {
 			const req = indexedDB.open('stackr');
 			req.onsuccess = () => resolve(req.result);
 			req.onerror = () => reject(req.error);
 		});
-
-		const daysAgoStr = (n) => {
+		const day = (n) => {
 			const d = new Date();
 			d.setDate(d.getDate() - n);
 			return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 		};
-
-		const iso = '2026-01-01T00:00:00.000Z';
+		const iso = new Date(Date.now() - 90 * 86400000).toISOString();
 		const stacks = [
-			{ id: 'st_morning', user_id: uid, name: 'Morning Routine', trigger: 'After coffee', color: 'amber', icon: '☕', sort_order: 0, created_at: iso, updated_at: iso },
-			{ id: 'st_reading', user_id: uid, name: 'Reading', trigger: 'After dinner', color: 'violet', icon: '📚', sort_order: 1, created_at: iso, updated_at: iso }
-		];
+			{ id: 'st_morning', name: 'Morning Coffee', trigger: 'After I pour my morning coffee', color: 'amber', icon: '☕', sort_order: 0 },
+			{ id: 'st_wind', name: 'Wind Down', trigger: 'After I brush my teeth at night', color: 'violet', icon: '🌙', sort_order: 1 }
+		].map((s) => ({ ...s, user_id: uid, created_at: iso, updated_at: iso }));
 		const habits = [
-			{ id: 'h_m1', stack_id: 'st_morning', user_id: uid, name: 'Stretch', sort_order: 0, created_at: iso, updated_at: iso },
-			{ id: 'h_m2', stack_id: 'st_morning', user_id: uid, name: 'Journal', sort_order: 1, created_at: iso, updated_at: iso },
-			{ id: 'h_r1', stack_id: 'st_reading', user_id: uid, name: 'Read 20 pages', sort_order: 0, created_at: iso, updated_at: iso }
-		];
-		const completions = [1, 2, 3, 4, 5].flatMap((n) =>
-			habits.map((h, i) => ({
-				id: `c_${h.id}_${n}`,
-				habit_id: h.id,
-				user_id: uid,
-				// awake histories 1-5 days old keep the room out of sleepy mood
-				completed_at: daysAgoStr(n),
-				created_at: iso
-			}))
-		);
+			{ id: 'h_m1', stack_id: 'st_morning', name: 'Drink a glass of water' },
+			{ id: 'h_m2', stack_id: 'st_morning', name: 'Write my top 3 for today' },
+			{ id: 'h_m3', stack_id: 'st_morning', name: 'Stretch for 2 minutes' },
+			{ id: 'h_w1', stack_id: 'st_wind', name: 'Read 5 pages' },
+			{ id: 'h_w2', stack_id: 'st_wind', name: 'Write one line in my journal' }
+		].map((h, i) => ({ ...h, user_id: uid, sort_order: i, created_at: iso, updated_at: iso }));
+		// ~7 weeks of mostly-consistent history, skipping a few days
+		const completions = [];
+		for (let n = 1; n <= 50; n++) {
+			habits.forEach((h, i) => {
+				if ((n * 7 + i * 3) % 11 < 8) completions.push({ id: `c_${h.id}_${n}`, habit_id: h.id, user_id: uid, completed_at: day(n), created_at: iso });
+			});
+		}
+		for (const id of done ?? []) completions.push({ id: `c_${id}_0`, habit_id: id, user_id: uid, completed_at: day(0), created_at: iso });
+		let level = 0;
+		while (25 * (level + 1) * (level + 2) <= xp) level++;
 		const profile = {
-			id: uid,
-			xp,
-			level: Math.floor(xp / 50),
-			streak_days: 3,
-			longest_streak: 5,
-			total_completions: completions.length,
-			theme: 'default',
-			created_at: iso,
-			updated_at: iso
+			id: uid, xp, level, streak_days: 6, longest_streak: 12, total_completions: completions.length,
+			theme: 'default', created_at: iso, updated_at: iso
 		};
-
 		await new Promise((resolve, reject) => {
 			const tx = db.transaction(['profile', 'stacks', 'habits', 'completions'], 'readwrite');
 			tx.objectStore('profile').put(profile);
@@ -90,18 +77,14 @@ for (const shot of SHOTS) {
 			tx.onerror = () => reject(tx.error);
 		});
 		db.close();
-	}, shot.xp);
+	}, shot);
 
-	// deterministic mood: fix Date at the spec'd local hour
-	await page.clock.setFixedTime(new Date(2026, 9, 8, shot.hour, 30, 0));
-	await page.goto(`${BASE}/achievements`, { waitUntil: 'networkidle' });
-	await page.waitForSelector('[data-test="lofi-room-hero"]', { timeout: 15000 });
-
-	const label = await page.locator('[data-test="stage-label"]').textContent();
-	console.log(`${shot.file}: ${label?.trim()}`);
-	await page.screenshot({ path: shot.file, fullPage: true });
+	await page.goto(`${BASE}${shot.path}`, { waitUntil: 'networkidle' });
+	await page.waitForSelector('nav[aria-label="Main"]', { timeout: 15000 });
+	await page.waitForTimeout(400); // let entry transitions settle
+	await page.screenshot({ path: shot.file });
+	console.log(shot.file);
 	await context.close();
 }
 
 await browser.close();
-console.log('done');

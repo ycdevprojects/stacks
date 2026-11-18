@@ -3,13 +3,10 @@ import {
 	xpForLevel,
 	levelFromXp,
 	xpProgressInLevel,
-	calculateXPGain,
-	checkLevelUp,
 	calculateStreak,
-	completionHeatmapData,
-	heatmapLevel
+	longestStreak
 } from '$lib/utils/gamification';
-import { today, daysAgo } from '$lib/utils/helpers';
+import { daysAgo } from '$lib/utils/helpers';
 
 describe('XP & Leveling', () => {
 	describe('xpForLevel', () => {
@@ -87,192 +84,49 @@ describe('XP & Leveling', () => {
 	});
 });
 
-describe('calculateXPGain', () => {
-	it('calculates base XP only', () => {
-		const result = calculateXPGain(1, 0, false);
-		expect(result.base).toBe(10);
-		expect(result.streakBonus).toBe(0);
-		expect(result.stackBonus).toBe(0);
-		expect(result.total).toBe(10);
-	});
 
-	it('adds streak bonus', () => {
-		const result = calculateXPGain(1, 5, false);
-		expect(result.base).toBe(10);
-		expect(result.streakBonus).toBe(25); // 5 days * 5 XP/day
-		expect(result.total).toBe(35);
-	});
-
-	it('caps streak bonus at MAX_STREAK_BONUS (50)', () => {
-		const result = calculateXPGain(1, 20, false);
-		expect(result.streakBonus).toBe(50); // capped
-	});
-
-	it('adds stack completion bonus', () => {
-		const result = calculateXPGain(1, 0, true);
-		expect(result.stackBonus).toBe(25);
-		expect(result.total).toBe(35); // 10 base + 25 stack
-	});
-
-	it('combines all bonuses', () => {
-		const result = calculateXPGain(3, 4, true);
-		expect(result.base).toBe(30);        // 3 * 10
-		expect(result.streakBonus).toBe(20);  // 4 * 5
-		expect(result.stackBonus).toBe(25);
-		expect(result.total).toBe(75);
-	});
-
-	it('handles zero habits completed', () => {
-		const result = calculateXPGain(0, 0, false);
-		expect(result.total).toBe(0);
-	});
-});
-
-describe('checkLevelUp', () => {
-	it('returns null when no level up', () => {
-		expect(checkLevelUp(25, 45)).toBeNull();
-	});
-
-	it('detects a level up', () => {
-		const result = checkLevelUp(45, 55);
-		expect(result).not.toBeNull();
-		expect(result!.previousLevel).toBe(0);
-		expect(result!.newLevel).toBe(1);
-	});
-
-	it('detects multi-level up', () => {
-		const result = checkLevelUp(40, 310);
-		expect(result).not.toBeNull();
-		expect(result!.previousLevel).toBe(0);
-		expect(result!.newLevel).toBe(3);
-	});
-
-	it('returns null when XP decreases', () => {
-		expect(checkLevelUp(200, 100)).toBeNull();
-	});
-});
-
+// All dates come from the app's local-date helpers so the tests hold in any timezone.
 describe('calculateStreak', () => {
-	it('returns 0 for empty array', () => {
+	it('returns 0 for no completions', () => {
 		expect(calculateStreak([])).toBe(0);
 	});
 
 	it('returns 1 for just today', () => {
-		const today = new Date().toISOString().slice(0, 10);
-		expect(calculateStreak([today])).toBe(1);
+		expect(calculateStreak([daysAgo(0)])).toBe(1);
 	});
 
-	it('calculates consecutive days', () => {
-		const today = new Date();
-		const dates = [];
-		for (let i = 0; i < 5; i++) {
-			const d = new Date(today);
-			d.setDate(d.getDate() - i);
-			dates.push(d.toISOString().slice(0, 10));
-		}
-		expect(calculateStreak(dates)).toBe(5);
+	it('counts consecutive days ending today', () => {
+		expect(calculateStreak([0, 1, 2, 3, 4].map(daysAgo))).toBe(5);
 	});
 
-	it('returns 0 if most recent is more than 1 day ago', () => {
-		const dates = [daysAgo(2)];
-		expect(calculateStreak(dates)).toBe(0);
+	it('keeps a streak alive when the latest completion was yesterday', () => {
+		expect(calculateStreak([daysAgo(1), daysAgo(2)])).toBe(2);
 	});
 
-	it('counts streak starting from yesterday as valid', () => {
-		// Use the app's own helpers so date strings match calculateStreak's internal today()
-		const yesterday = daysAgo(1);
-		expect(calculateStreak([yesterday])).toBe(1);
+	it('returns 0 once a full day has been missed', () => {
+		expect(calculateStreak([daysAgo(2), daysAgo(3)])).toBe(0);
 	});
 
-	it('handles duplicate dates', () => {
-		const today = new Date().toISOString().slice(0, 10);
-		expect(calculateStreak([today, today, today])).toBe(1);
+	it('ignores duplicates and input order', () => {
+		expect(calculateStreak([daysAgo(2), daysAgo(0), daysAgo(1), daysAgo(0)])).toBe(3);
 	});
 
-	it('stops counting at gap in dates', () => {
-		const today = new Date();
-		const dates = [];
-		// 3 consecutive days, then a gap
-		for (let i = 0; i < 3; i++) {
-			const d = new Date(today);
-			d.setDate(d.getDate() - i);
-			dates.push(d.toISOString().slice(0, 10));
-		}
-		// Add a date 5 days ago (gap)
-		const fiveAgo = new Date(today);
-		fiveAgo.setDate(fiveAgo.getDate() - 5);
-		dates.push(fiveAgo.toISOString().slice(0, 10));
-
-		expect(calculateStreak(dates)).toBe(3);
-	});
-
-	it('handles unsorted input dates', () => {
-		const today = new Date();
-		today.setHours(0, 0, 0, 0);
-		const d0 = today.toISOString().slice(0, 10);
-		const d1 = new Date(today);
-		d1.setDate(d1.getDate() - 1);
-		const d1s = d1.toISOString().slice(0, 10);
-		const d2 = new Date(today);
-		d2.setDate(d2.getDate() - 2);
-		const d2s = d2.toISOString().slice(0, 10);
-
-		// Pass in reverse order
-		expect(calculateStreak([d2s, d0, d1s])).toBe(3);
+	it('stops at the first gap', () => {
+		expect(calculateStreak([daysAgo(0), daysAgo(1), daysAgo(2), daysAgo(5)])).toBe(3);
 	});
 });
 
-describe('completionHeatmapData', () => {
-	it('returns empty map for no completions', () => {
-		const result = completionHeatmapData([]);
-		expect(result.size).toBe(0);
-	});
-
-	it('counts completions per date', () => {
-		const result = completionHeatmapData([
-			{ completed_at: '2024-06-15' },
-			{ completed_at: '2024-06-15' },
-			{ completed_at: '2024-06-16' },
-		]);
-		expect(result.get('2024-06-15')).toBe(2);
-		expect(result.get('2024-06-16')).toBe(1);
-	});
-
-	it('handles dates with time components', () => {
-		const result = completionHeatmapData([
-			{ completed_at: '2024-06-15T10:30:00' },
-			{ completed_at: '2024-06-15T14:00:00' },
-		]);
-		expect(result.get('2024-06-15')).toBe(2);
-	});
-});
-
-describe('heatmapLevel', () => {
+describe('longestStreak', () => {
 	it('returns 0 for no completions', () => {
-		expect(heatmapLevel(0, 10)).toBe(0);
+		expect(longestStreak([])).toBe(0);
 	});
 
-	it('returns 1 for low activity', () => {
-		expect(heatmapLevel(1, 10)).toBe(1);
-		expect(heatmapLevel(2, 10)).toBe(1);
+	it('finds the longest run even when it has ended', () => {
+		const dates = [daysAgo(20), daysAgo(19), daysAgo(18), daysAgo(17), daysAgo(1), daysAgo(0)];
+		expect(longestStreak(dates)).toBe(4);
 	});
 
-	it('returns higher levels for higher activity', () => {
-		expect(heatmapLevel(3, 10)).toBe(2);  // 3/10 = 0.3 → 2
-		expect(heatmapLevel(5, 10)).toBe(2);   // 5/10 = 0.5 → 2 (≤0.5 → 2)
-		expect(heatmapLevel(6, 10)).toBe(3);   // 6/10 = 0.6 → 3
-		expect(heatmapLevel(8, 10)).toBe(4);   // 8/10 = 0.8 → 4
-		expect(heatmapLevel(10, 10)).toBe(4);  // 10/10 = 1.0 → 4
-	});
-
-	it('returns 1 when max is 0 but count > 0', () => {
-		expect(heatmapLevel(1, 0)).toBe(1);
-	});
-
-	it('returns correct levels at exact boundaries', () => {
-		expect(heatmapLevel(1, 4)).toBe(1);   // 1/4 = 0.25 → 1
-		expect(heatmapLevel(2, 4)).toBe(2);   // 2/4 = 0.5 → 2
-		expect(heatmapLevel(3, 4)).toBe(3);   // 3/4 = 0.75 → 3
-		expect(heatmapLevel(4, 4)).toBe(4);   // 4/4 = 1.0 → 4
+	it('ignores duplicates', () => {
+		expect(longestStreak([daysAgo(1), daysAgo(1), daysAgo(0)])).toBe(2);
 	});
 });

@@ -37,20 +37,16 @@ export interface RoomPlacement {
 	stage?: number;
 	/** optional last stage at which the item is still visible (exclusive) */
 	until?: number;
-	/**
-	 * `'user'` placements are owned by a player room (the future
-	 * unlock-and-place feature) and skip the stage gate — the component shows
-	 * them whenever they are present in the state.
-	 */
+	/** `'user'` placements (player-placed items) skip the stage gate. */
 	source?: 'user';
 }
 
 /**
  * Stage-gated reveals (cumulative profile XP):
- * 1 bare (floor bed, crate with lamp, windows) -> 2 desk+chair ->
- * 3 desk sprout+poster -> 4 proper bed+nightstand+rug (retires the floor bed) ->
- * 5 pet+bookshelf -> 6 media shelf+speaker. Rug is a composed 6-tile x 5-tile
- * sprite (~a third of the floor); bookshelf is a composed 3-tile strip.
+ * 1 bare (sleeping bag, crate with lamp, windows) -> 2 desk+chair ->
+ * 3 desk sprout+poster+floor plant -> 4 proper bed+nightstand+rug (retires the
+ * sleeping bag) -> 5 pet+bookshelf+second plant -> 6 media shelf+speaker.
+ * Rug is a composed 6-tile x 5-tile sprite; bookshelf is a composed 3-tile strip.
  */
 export const ROOM_PLACEMENTS: RoomPlacement[] = [
 	{ id: 'window', kindId: 'window', x: 6.95, y: 0.08, stage: 1 },
@@ -59,14 +55,16 @@ export const ROOM_PLACEMENTS: RoomPlacement[] = [
 	{ id: 'speaker', kindId: 'speaker', x: 9.05, y: 0.18, stage: 6 },
 	{ id: 'bookshelf', kindId: 'bookshelf', x: 4.2, y: 0.62, stage: 5 },
 	{ id: 'poster', kindId: 'poster', x: 1.25, y: 0.12, stage: 3 },
-	{ id: 'lamp', kindId: 'lamp', x: 9.07, y: 8.32, stage: 1 },
+	{ id: 'lamp', kindId: 'lamp', x: 8.72, y: 3.9, stage: 1 },
 	{ id: 'desk', kindId: 'desk', x: 6.4, y: 1.55, stage: 2 },
 	{ id: 'chair', kindId: 'chair', x: 7.25, y: 2.7, stage: 2 },
 	{ id: 'sprout', kindId: 'sprout', x: 7.35, y: 1.1, stage: 3 },
-	{ id: 'bed', kindId: 'bed', x: 0.35, y: 1.55, stage: 4 },
-	{ id: 'nightstand', kindId: 'nightstand', x: 2, y: 2, stage: 4 },
-	{ id: 'floorbed', kindId: 'floorbed', x: 0.45, y: 2.9, stage: 1, until: 4 },
-	{ id: 'crate', kindId: 'crate', x: 8.95, y: 8.9, stage: 1 },
+	{ id: 'bed', kindId: 'bed', x: 0.3, y: 1.55, stage: 4 },
+	{ id: 'nightstand', kindId: 'nightstand', x: 2.1, y: 1.7, stage: 4 },
+	{ id: 'floorbed', kindId: 'floorbed', x: 0.4, y: 2, stage: 1, until: 4 },
+	{ id: 'crate', kindId: 'crate', x: 8.6, y: 4.4, stage: 1 },
+	{ id: 'plant', kindId: 'plant', x: 0.4, y: 8.5, stage: 3 },
+	{ id: 'plant-right', kindId: 'plant', x: 8.6, y: 8.4, stage: 5 },
 	{ id: 'rug', kindId: 'rug', x: 2, y: 4.75, stage: 4 },
 	{ id: 'pet', kindId: 'pet', x: 4.55, y: 6.85, stage: 5 }
 ];

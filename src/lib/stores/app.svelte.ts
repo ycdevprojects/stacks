@@ -1,28 +1,30 @@
-// Svelte stores for app state management
-// Uses runes ($state) for Svelte 5 reactivity
-// Local-only mode — all data in IndexedDB, no auth/sync
+// App state (Svelte 5 runes). Local-only: everything lives in IndexedDB.
 
-import type { Stack, Habit, Completion, Achievement, Profile } from '$lib/types';
+import type { Stack, Habit, Completion, Achievement, Profile, BadgeDefinition } from '$lib/types';
 import * as db from '$lib/services/db';
-import { calculateStreak } from '$lib/utils/gamification';
-import { generateId, today } from '$lib/utils/helpers';
+import { generateId, today as todayStr } from '$lib/utils/helpers';
+import { getBadge, timeOfDayBadges } from '$lib/utils/badges';
+import { stageFromXp } from '$lib/room/room-stage';
 import {
-	updateProfileOnComplete as doUpdateProfileComplete,
-	updateProfileOnUncomplete as doUpdateProfileUncomplete,
-	checkAndUnlockAchievements as doCheckAchievements,
-	checkIfFullStackToday
+	updateProfileOnComplete,
+	updateProfileOnUncomplete,
+	checkAndUnlockAchievements,
+	checkIfFullStackToday,
+	isStackCompleteOnDate
 } from './profile';
 
 const LOCAL_USER_ID_KEY = 'stackr_local_user_id';
 
-// App state using Svelte 5 runes
 let stacks = $state<Stack[]>([]);
 let habits = $state<Habit[]>([]);
 let completions = $state<Completion[]>([]);
 let achievements = $state<Achievement[]>([]);
 let profile = $state<Profile | null>(null);
 let userId = $state<string | null>(null);
-let isLoading = $state(true);
+let today = $state(todayStr());
+
+// "habitId|date" keys of completions currently in a done-set lookup.
+const doneKeys = $derived(new Set(completions.map((c) => `${c.habit_id}|${c.completed_at}`)));
 
 export function getAppState() {
 	return {
@@ -32,7 +34,35 @@ export function getAppState() {
 		get achievements() { return achievements; },
 		get profile() { return profile; },
 		get userId() { return userId; },
-		get isLoading() { return isLoading; },
+		/** Local date, kept current across midnight while the app stays open. */
+		get today() { return today; }
+	};
+}
+
+export function isDone(habitId: string, date: string): boolean {
+	return doneKeys.has(`${habitId}|${date}`);
+}
+
+export function habitsOf(stackId: string): Habit[] {
+	return habits.filter((h) => h.stack_id === stackId);
+}
+
+const bySortOrder = <T extends { sort_order: number; created_at: string }>(a: T, b: T) =>
+	a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at);
+
+function now(): string {
+	return new Date().toISOString();
+}
+
+function requireUser(): string {
+	if (!userId) throw new Error('App state not initialized');
+	return userId;
+}
+
+function newProfile(id: string): Profile {
+	return {
+		id, xp: 0, level: 0, streak_days: 0, longest_streak: 0, total_completions: 0,
+		theme: 'default', created_at: now(), updated_at: now()
 	};
 }
 
@@ -45,126 +75,104 @@ function getLocalUserId(): string {
 	return id;
 }
 
-// Initialize app state — always local mode
-// Migrates any existing data from old auth user IDs to local user ID
+// ============ LIFECYCLE ============
+
 export async function initializeState(): Promise<void> {
 	const uid = getLocalUserId();
+	await db.migrateFromOldUserId(uid);
+	const data = await db.loadAll(uid);
+
 	userId = uid;
-	isLoading = true;
-
-	try {
-		// One-time migration: re-key any data from Supabase auth user to local user
-		await db.migrateFromOldUserId(uid);
-
-		const [dbStacks, dbHabits, dbCompletions, dbProfile, dbAchievements] = await Promise.all([
-			db.getAllStacks(uid),
-			db.getAllHabitsByUser(uid),
-			db.getCompletionsByUser(uid),
-			db.getProfile(uid),
-			db.getAchievementsByUser(uid)
-		]);
-
-		stacks = dbStacks;
-		habits = dbHabits;
-		completions = dbCompletions;
-		achievements = dbAchievements;
-
-		if (dbProfile) {
-			profile = dbProfile;
-		} else {
-			const newProfile: Profile = {
-				id: uid, xp: 0, level: 0, streak_days: 0,
-				longest_streak: 0, total_completions: 0, theme: 'default',
-				created_at: new Date().toISOString(), updated_at: new Date().toISOString()
-			};
-			await db.saveProfile(newProfile);
-			profile = newProfile;
-		}
-	} finally {
-		isLoading = false;
+	stacks = data.stacks.sort(bySortOrder);
+	habits = data.habits.sort(bySortOrder);
+	completions = data.completions;
+	achievements = data.achievements;
+	if (data.profile) {
+		profile = data.profile;
+	} else {
+		// Save the plain object: IndexedDB can't clone the $state proxy.
+		const fresh = newProfile(uid);
+		await db.saveProfile(fresh);
+		profile = fresh;
 	}
+	// Quietly catch up on badges earned before they were tracked (older versions, imports).
+	await unlockAchievements();
 }
 
-export function resetState(): void {
-	localStorage.removeItem(LOCAL_USER_ID_KEY);
-	stacks = [];
-	habits = [];
-	completions = [];
-	achievements = [];
-	profile = null;
-	userId = null;
-	isLoading = true;
-	db.resetDB();
+/** Re-read the local date; call on focus/visibility so midnight rolls over. */
+export function refreshToday(): void {
+	const t = todayStr();
+	if (t !== today) today = t;
 }
 
-// ============ STACK OPERATIONS ============
+// ============ ACHIEVEMENTS ============
 
-export async function createStack(name: string, trigger: string, color: string, icon: string): Promise<Stack> {
-	if (!userId) throw new Error('Not initialized');
+async function unlockAchievements(timeOfDay: { isNightOwl?: boolean; isEarlyBird?: boolean } = {}): Promise<BadgeDefinition[]> {
+	if (!profile || !userId) return [];
+	const result = await checkAndUnlockAchievements(
+		profile, achievements, stacks, userId, checkIfFullStackToday(stacks, habits, completions), timeOfDay
+	);
+	if (result.newAchievements.length > 0) achievements = [...achievements, ...result.newAchievements];
+	return result.badgeKeys.map(getBadge).filter((b): b is BadgeDefinition => !!b);
+}
+
+// ============ STACKS ============
+
+export async function createStack(
+	input: { name: string; trigger: string; color: string; icon: string },
+	habitNames: string[] = []
+): Promise<{ stack: Stack; newBadges: BadgeDefinition[] }> {
+	const uid = requireUser();
 	const stack: Stack = {
-		id: generateId(), user_id: userId, name, trigger, color, icon,
-		sort_order: stacks.length, created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+		id: generateId(), user_id: uid, ...input,
+		sort_order: stacks.length ? Math.max(...stacks.map((s) => s.sort_order)) + 1 : 0,
+		created_at: now(), updated_at: now()
 	};
+	const newHabits: Habit[] = habitNames.map((name, i) => ({
+		id: generateId(), stack_id: stack.id, user_id: uid, name,
+		sort_order: i, created_at: now(), updated_at: now()
+	}));
 	await db.saveStack(stack);
+	if (newHabits.length) await db.saveHabits(newHabits);
 	stacks = [...stacks, stack];
-	return stack;
+	habits = [...habits, ...newHabits];
+	return { stack, newBadges: await unlockAchievements() };
 }
 
 export async function updateStack(stack: Stack): Promise<void> {
-	const updated = { ...stack, updated_at: new Date().toISOString() };
+	const updated = { ...$state.snapshot(stack), updated_at: now() };
 	await db.saveStack(updated);
-	stacks = stacks.map(s => s.id === updated.id ? updated : s);
+	stacks = stacks.map((s) => (s.id === updated.id ? updated : s));
 }
 
 export async function removeStack(id: string): Promise<void> {
+	const habitIds = new Set(habitsOf(id).map((h) => h.id));
 	await db.deleteStack(id);
-	stacks = stacks.filter(s => s.id !== id);
-	habits = habits.filter(h => h.stack_id !== id);
+	stacks = stacks.filter((s) => s.id !== id);
+	habits = habits.filter((h) => h.stack_id !== id);
+	completions = completions.filter((c) => !habitIds.has(c.habit_id));
 }
 
-// ============ REORDER OPERATIONS ============
-
-export async function reorderStacks(stackIds: string[]): Promise<void> {
-	if (!userId) throw new Error('Not initialized');
-	const reordered = stackIds
-		.map((id, index) => {
-			const stack = stacks.find(s => s.id === id);
-			if (!stack) return null;
-			return { ...stack, sort_order: index };
-		})
-		.filter((s): s is Stack => s !== null);
-	for (const stack of reordered) {
-		await db.saveStack(stack);
-	}
+/** Move a stack up (-1) or down (+1) in the list. */
+export async function moveStack(id: string, delta: -1 | 1): Promise<void> {
+	const order = [...stacks];
+	const from = order.findIndex((s) => s.id === id);
+	const to = from + delta;
+	if (from < 0 || to < 0 || to >= order.length) return;
+	[order[from], order[to]] = [order[to], order[from]];
+	const reordered = order.map((s, i) => ({ ...$state.snapshot(s), sort_order: i }));
 	stacks = reordered;
+	await db.saveStacks(reordered);
 }
 
-export async function reorderHabits(stackId: string, habitIds: string[]): Promise<void> {
-	if (!userId) throw new Error('Not initialized');
-	const reordered = habitIds
-		.map((id, index) => {
-			const habit = habits.find(h => h.id === id && h.stack_id === stackId);
-			if (!habit) return null;
-			return { ...habit, sort_order: index };
-		})
-		.filter((h): h is Habit => h !== null);
-	for (const habit of reordered) {
-		await db.saveHabit(habit);
-	}
-	habits = habits.map(h => {
-		const updated = reordered.find(r => r.id === h.id);
-		return updated ?? h;
-	});
-}
-
-// ============ HABIT OPERATIONS ============
+// ============ HABITS ============
 
 export async function createHabit(stackId: string, name: string, description?: string): Promise<Habit> {
-	if (!userId) throw new Error('Not initialized');
-	const stackHabits = habits.filter(h => h.stack_id === stackId);
+	const siblings = habitsOf(stackId);
 	const habit: Habit = {
-		id: generateId(), stack_id: stackId, user_id: userId, name, description,
-		sort_order: stackHabits.length, created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+		id: generateId(), stack_id: stackId, user_id: requireUser(), name, description,
+		sort_order: siblings.length ? Math.max(...siblings.map((h) => h.sort_order)) + 1 : 0,
+		created_at: now(), updated_at: now()
 	};
 	await db.saveHabit(habit);
 	habits = [...habits, habit];
@@ -172,66 +180,125 @@ export async function createHabit(stackId: string, name: string, description?: s
 }
 
 export async function updateHabit(habit: Habit): Promise<void> {
-	const updated = { ...habit, updated_at: new Date().toISOString() };
+	const updated = { ...$state.snapshot(habit), updated_at: now() };
 	await db.saveHabit(updated);
-	habits = habits.map(h => h.id === updated.id ? updated : h);
+	habits = habits.map((h) => (h.id === updated.id ? updated : h));
 }
 
 export async function removeHabit(id: string): Promise<void> {
 	await db.deleteHabit(id);
-	habits = habits.filter(h => h.id !== id);
-	completions = completions.filter(c => c.habit_id !== id);
+	habits = habits.filter((h) => h.id !== id);
+	completions = completions.filter((c) => c.habit_id !== id);
 }
 
-// ============ COMPLETION OPERATIONS ============
-
-export async function toggleCompletion(habitId: string, date?: string): Promise<boolean> {
-	if (!userId) throw new Error('Not initialized');
-
-	const completedDate = date ?? today();
-	const existing = completions.find(c => c.habit_id === habitId && c.completed_at === completedDate);
-
-	if (existing) {
-		await db.deleteCompletion(existing.id);
-		completions = completions.filter(c => c.id !== existing.id);
-		if (profile) {
-			profile = await doUpdateProfileUncomplete(
-				profile, completions, stacks, habits, habitId, completedDate
-			);
-		}
-		return false;
-	}
-
-	const completion: Completion = {
-		id: generateId(), habit_id: habitId, user_id: userId,
-		completed_at: completedDate, created_at: new Date().toISOString()
-	};
-	await db.saveCompletion(completion);
-	completions = [...completions, completion];
-
-	if (profile) {
-		profile = await doUpdateProfileComplete(
-			profile, completions, stacks, habits, habitId, completedDate
-		);
-		// Check for new achievements
-		const result = await doCheckAchievements(
-			profile, achievements, stacks, userId!, checkIfFullStackToday(stacks, habits, completions)
-		);
-		if (result.newAchievements.length > 0) {
-			achievements = [...achievements, ...result.newAchievements];
-		}
-	}
-
-	return true;
+/** Move a habit up (-1) or down (+1) within its stack. */
+export async function moveHabit(id: string, delta: -1 | 1): Promise<void> {
+	const habit = habits.find((h) => h.id === id);
+	if (!habit) return;
+	const order = habitsOf(habit.stack_id);
+	const from = order.findIndex((h) => h.id === id);
+	const to = from + delta;
+	if (to < 0 || to >= order.length) return;
+	[order[from], order[to]] = [order[to], order[from]];
+	const reordered = order.map((h, i) => ({ ...$state.snapshot(h), sort_order: i }));
+	const byId = new Map(reordered.map((h) => [h.id, h]));
+	habits = habits.map((h) => byId.get(h.id) ?? h).sort(bySortOrder);
+	await db.saveHabits(reordered);
 }
 
-export async function checkAndUnlockAchievements(): Promise<string[]> {
-	if (!profile || !userId) return [];
-	const result = await doCheckAchievements(
-		profile, achievements, stacks, userId, checkIfFullStackToday(stacks, habits, completions)
+// ============ COMPLETIONS ============
+
+export interface ToggleResult {
+	completed: boolean;
+	xpDelta: number;
+	/** New level when this toggle crossed a level boundary upward. */
+	levelUp: number | null;
+	/** New room stage when this toggle unlocked one. */
+	stageUp: number | null;
+	/** The habit's stack, when this completion finished it for the day. */
+	stackCompleted: Stack | null;
+	newBadges: BadgeDefinition[];
+}
+
+const pending = new Set<string>();
+
+/** Check or uncheck a habit on a date. Returns null while a toggle for the same habit is in flight. */
+export async function toggleCompletion(habitId: string, date: string = today): Promise<ToggleResult | null> {
+	const uid = requireUser();
+	const key = `${habitId}|${date}`;
+	if (pending.has(key) || !profile) return null;
+	pending.add(key);
+	try {
+		const before = profile;
+		const existing = completions.find((c) => c.habit_id === habitId && c.completed_at === date);
+
+		if (existing) {
+			await db.deleteCompletion(existing.id);
+			completions = completions.filter((c) => c.id !== existing.id);
+			profile = await updateProfileOnUncomplete(before, completions, stacks, habits, habitId, date);
+			return {
+				completed: false, xpDelta: profile.xp - before.xp,
+				levelUp: null, stageUp: null, stackCompleted: null, newBadges: []
+			};
+		}
+
+		const completion: Completion = { id: generateId(), habit_id: habitId, user_id: uid, completed_at: date, created_at: now() };
+		await db.saveCompletion(completion);
+		completions = [...completions, completion];
+		profile = await updateProfileOnComplete(before, completions, stacks, habits, habitId, date);
+
+		const stack = stacks.find((s) => s.id === habits.find((h) => h.id === habitId)?.stack_id) ?? null;
+		const stageBefore = stageFromXp(before.xp);
+		const stageAfter = stageFromXp(profile.xp);
+		const newBadges = await unlockAchievements(date === todayStr() ? timeOfDayBadges(new Date().getHours()) : {});
+
+		return {
+			completed: true,
+			xpDelta: profile.xp - before.xp,
+			levelUp: profile.level > before.level ? profile.level : null,
+			stageUp: stageAfter > stageBefore ? stageAfter : null,
+			stackCompleted: stack && isStackCompleteOnDate(stack.id, habits, completions, date) ? stack : null,
+			newBadges
+		};
+	} finally {
+		pending.delete(key);
+	}
+}
+
+// ============ BACKUP / RESET ============
+
+export function exportBackup(): db.Backup {
+	return $state.snapshot({
+		app: 'stackr' as const,
+		version: 1 as const,
+		exported_at: now(),
+		stacks, habits, completions, achievements, profile
+	});
+}
+
+function isBackup(value: unknown): value is db.Backup {
+	const v = value as Partial<db.Backup> | null;
+	return (
+		!!v && v.app === 'stackr' &&
+		Array.isArray(v.stacks) && Array.isArray(v.habits) &&
+		Array.isArray(v.completions) && Array.isArray(v.achievements)
 	);
-	if (result.newAchievements.length > 0) {
-		achievements = [...achievements, ...result.newAchievements];
+}
+
+/** Replace all local data with a backup file's contents. Throws on invalid input. */
+export async function importBackup(json: string): Promise<void> {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(json);
+	} catch {
+		throw new Error('That file is not valid JSON.');
 	}
-	return result.badgeKeys;
+	if (!isBackup(parsed)) throw new Error('That file is not a Stackr backup.');
+	await db.replaceAll(requireUser(), parsed);
+	await initializeState();
+}
+
+export async function resetAllData(): Promise<void> {
+	await db.clearAll();
+	await initializeState();
 }

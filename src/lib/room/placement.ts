@@ -1,9 +1,8 @@
 // Grid placement engine for the rewards room.
-// Pure geometry + rules over the item-kind catalog: footprint rects, integer
-// cell coverage, zone bands (wall / floor / surface stacking) and collision.
-// The scripted layout validates itself against these rules (layout.test.ts),
-// and the future unlock-and-place feature calls canPlace() before saving a
-// user placement.
+// Pure geometry + rules over the item-kind catalog: footprint rects, zone
+// bands (wall / floor / surface stacking) and collision. The scripted layout
+// validates itself against these rules (layout.test.ts); canPlace() is the
+// check a player-placed item must pass.
 import { ROOM_GRID } from './layout';
 import { kindOf, footprintH, type ItemKind, type StackRule } from './catalog';
 
@@ -72,29 +71,6 @@ export function overlaps(a: Rect, b: Rect): boolean {
 		a.y < b.y + b.h - EPS &&
 		b.y < a.y + a.h - EPS
 	);
-}
-
-/**
- * Integer cells whose square the rect touches at all — partial edge cells
- * included, exact boundary-touching excluded. This is the conservative claim
- * map for a highlight UI; collision math itself stays continuous via
- * rectOf + overlaps.
- */
-export function cellsOf(r: Rect): Array<{ cx: number; cy: number }> {
-	const cells: Array<{ cx: number; cy: number }> = [];
-	const x0 = Math.floor(r.x + EPS);
-	const x1 = Math.ceil(r.x + r.w - EPS) - 1;
-	const y0 = Math.floor(r.y + EPS);
-	const y1 = Math.ceil(r.y + r.h - EPS) - 1;
-	for (let cy = y0; cy <= y1; cy++) {
-		for (let cx = x0; cx <= x1; cx++) cells.push({ cx, cy });
-	}
-	return cells;
-}
-
-/** Snap a tile coordinate onto the integer grid (for a click-to-place UI). */
-export function snapToGrid(v: number): number {
-	return Math.round(v);
 }
 
 function kindExists(kindId: string): boolean {
@@ -267,7 +243,7 @@ export function validatePlacements(
 }
 
 /**
- * The future unlock-and-place UI calls this before saving a user placement.
+ * Validate a single (e.g. player-placed) item before saving it.
  * Hard rules: bounds, zone band, stacks for `on-surface` kinds (their sprite
  * art assumes a surface), collisions. Declared stack rules on zone 'floor'
  * kinds (a chair in front of a desk) stay soft — a user may place those free.
@@ -315,25 +291,4 @@ export function canPlace(
 		}
 	}
 	return { ok: true };
-}
-
-/**
- * Cell -> list of placement ids claiming it. UI helper for highlight/lookup;
- * claims partial edge cells (see cellsOf). Unknown kinds are skipped.
- */
-export function occupancy(
-	placements: readonly (PlacedLike & WithReveal & { id?: string })[]
-): Map<string, string[]> {
-	const map = new Map<string, string[]>();
-	for (const p of placements) {
-		if (!kindExists(p.kindId)) continue;
-		const key = p.id ?? kindOf(p.kindId).id;
-		for (const { cx, cy } of cellsOf(rectOf(p))) {
-			const cell = `${cx},${cy}`;
-			const ids = map.get(cell) ?? [];
-			ids.push(key);
-			map.set(cell, ids);
-		}
-	}
-	return map;
 }

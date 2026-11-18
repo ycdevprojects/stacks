@@ -1,46 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import {
-	cellsOf,
-	coexistsWith,
-	overlaps,
-	rectOf,
-	snapToGrid,
-	stackSatisfied,
-	canPlace,
-	validatePlacements,
-	occupancy
-} from './placement';
+import { coexistsWith, overlaps, rectOf, stackSatisfied, canPlace, validatePlacements } from './placement';
 import { ROOM_PLACEMENTS, resolveItem } from './layout';
 import { kindOf } from './catalog';
 
 const at = (kindId: string, x: number, y: number) => ({ kindId, x, y });
 
-describe('rectOf / cellsOf', () => {
+describe('rectOf / overlaps', () => {
 	it('rects take the kind footprint with aspect-derived height', () => {
 		expect(rectOf(at('desk', 6.4, 1.55))).toEqual({ x: 6.4, y: 1.55, w: 2.6, h: 1.3 });
-		expect(rectOf(at('bed', 0.35, 1.55))).toEqual({ x: 0.35, y: 1.55, w: 1.6, h: 3.2 });
+		const bed = rectOf(at('bed', 0.3, 1.55));
+		expect(bed.w).toBe(1.7);
+		expect(bed.h).toBeCloseTo((1.7 * 25) / 15, 9);
 		const crate = rectOf(at('crate', 8.95, 8.9));
 		expect(crate.h).toBeCloseTo(15 / 14, 9);
-	});
-
-	it('claims the cells whose square the rect touches', () => {
-		expect(cellsOf({ x: 2, y: 2, w: 1, h: 1 })).toEqual([{ cx: 2, cy: 2 }]);
-		// a fractional square straddling four cells claims all four
-		expect(cellsOf({ x: 4.55, y: 6.85, w: 0.9, h: 0.9 })).toEqual([
-			{ cx: 4, cy: 6 },
-			{ cx: 5, cy: 6 },
-			{ cx: 4, cy: 7 },
-			{ cx: 5, cy: 7 }
-		]);
-		// exact boundary-touching stays outside the claim (rug's clean right edge)
-		const cxCells = cellsOf({ x: 2, y: 4.75, w: 6, h: 5 }).map((c) => c.cx);
-		expect(cxCells).toContain(7);
-		expect(cxCells).not.toContain(8);
-	});
-
-	it('snaps coordinates onto the integer grid', () => {
-		expect(snapToGrid(6.95)).toBe(7);
-		expect(snapToGrid(0.08)).toBe(0);
 	});
 
 	it('detects area sharing and boundary touching', () => {
@@ -136,18 +108,6 @@ describe('validatePlacements', () => {
 		]);
 		expect(issues.some((i) => i.kindId === 'ghost')).toBe(true);
 		expect(issues.some((i) => /overlaps placement d2/.test(i.message ?? ''))).toBe(true);
-	});
-});
-
-describe('occupancy', () => {
-	it('maps claimed cells for UI highlight', () => {
-		const map = occupancy([
-			{ kindId: 'nightstand', x: 2, y: 2, id: 'nightstand' },
-			{ kindId: 'pet', x: 4.55, y: 6.85, id: 'pet' }
-		]);
-		expect(map.get('2,2')).toEqual(['nightstand']);
-		expect(map.get('4,6')).toEqual(['pet']);
-		expect(map.get('4,7')).toEqual(['pet']);
 	});
 });
 

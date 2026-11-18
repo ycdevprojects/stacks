@@ -2,8 +2,7 @@
 // One entry per object species (not per placed copy): the sprite file, its
 // native pixel size, and its footprint on the room grid. Placements reference
 // kinds by id (see layout.ts), so swapping a sprite or rebalancing a footprint
-// is a one-line change here — and the future unlock-and-place feature
-// resolves user-placed items through this same table.
+// is a one-line change here.
 //
 // Height rules: the renderer sets width + native aspect (`height:auto`), so a
 // kind never carries a hardcoded height — footprintH() derives the rendered /
@@ -11,7 +10,7 @@
 // derivation holds for every placement.
 import windowImg from '$lib/assets/room/window.png';
 import posterImg from '$lib/assets/room/poster.png';
-import floorbedImg from '$lib/assets/room/floorbed.png';
+import sleepingBagImg from '$lib/assets/room/sleeping-bag.png';
 import crateImg from '$lib/assets/room/crate.png';
 import lampImg from '$lib/assets/room/lamp.png';
 import deskImg from '$lib/assets/room/desk.png';
@@ -25,7 +24,7 @@ import shelfEmptyImg from '$lib/assets/room/shelf-empty.png';
 import speakerImg from '$lib/assets/room/speaker.png';
 import petImg from '$lib/assets/room/pet.png';
 
-/** Loose filter buckets for the future catalog UI ("furniture", "plants"). */
+/** Loose buckets ("furniture", "plants") used by placement rules and labels. */
 export type ItemCategory = 'wall-art' | 'furniture' | 'rug' | 'plant' | 'pet' | 'tech' | 'light';
 
 /**
@@ -52,7 +51,7 @@ export interface StackRule {
 
 export interface ItemKind {
 	id: string;
-	/** Human name — used by the future unlock/place catalog UI. */
+	/** Human name — shown when the item is tapped in the room. */
 	label: string;
 	sprite: string;
 	/** Native sprite pixels; the source of the aspect that derives footprint height. */
@@ -71,13 +70,13 @@ export interface ItemKind {
 export const ITEM_KINDS = {
 	window: {
 		id: 'window',
-		label: 'Night window',
+		label: 'Window',
 		sprite: windowImg,
 		spritePx: { w: 16, h: 16 },
 		footprintW: 0.85,
 		zone: 'wall',
 		category: 'wall-art',
-		alt: 'Night window with four dark panes'
+		alt: 'Window with four panes'
 	},
 	poster: {
 		id: 'poster',
@@ -161,8 +160,8 @@ export const ITEM_KINDS = {
 		id: 'bed',
 		label: 'Bed',
 		sprite: bedImg,
-		spritePx: { w: 16, h: 32 },
-		footprintW: 1.6,
+		spritePx: { w: 15, h: 25 },
+		footprintW: 1.7,
 		zone: 'floor',
 		category: 'furniture',
 		alt: 'Proper bed with an orange blanket against the wall'
@@ -179,13 +178,23 @@ export const ITEM_KINDS = {
 	},
 	floorbed: {
 		id: 'floorbed',
-		label: 'Floor bed',
-		sprite: floorbedImg,
-		spritePx: { w: 32, h: 16 },
-		footprintW: 2.2,
+		label: 'Sleeping bag',
+		sprite: sleepingBagImg,
+		spritePx: { w: 16, h: 11 },
+		footprintW: 1.9,
 		zone: 'floor',
 		category: 'furniture',
-		alt: 'Floor bed: a rolled-out blanket over a sleeping mat'
+		alt: 'Green sleeping bag rolled out on the floor'
+	},
+	plant: {
+		id: 'plant',
+		label: 'Floor plant',
+		sprite: sproutImg,
+		spritePx: { w: 16, h: 16 },
+		footprintW: 1.1,
+		zone: 'floor',
+		category: 'plant',
+		alt: 'Leafy potted plant on the floor'
 	},
 	crate: {
 		id: 'crate',
@@ -235,9 +244,6 @@ export const ITEM_KINDS = {
 		alt: 'Pet pig napping on the rug'
 	}
 } as const satisfies Record<string, ItemKind>;
-
-export type KindId = keyof typeof ITEM_KINDS;
-export type ItemKinds = Record<KindId, ItemKind>;
 
 /** Catalog lookup; throws on unknown ids so bad placements fail loudly in tests. */
 export function kindOf(id: string): ItemKind {
