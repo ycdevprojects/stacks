@@ -8,7 +8,7 @@
 		ROOM_GRID,
 		TILE_URLS,
 		LAMP_SPOT,
-		WINDOW_SPOT,
+		WINDOW_SPOTS,
 		DECOR_ORDER,
 		isVisible,
 		visibleItems,
@@ -124,6 +124,9 @@
 			.map((i) => ({ id: i.id, x: i.x + i.w / 2, y: i.y + i.h * 0.2, size: 0.6 }))
 	]);
 
+	// The glass inside the 16px window sprite: columns 2-13, rows 1-13.
+	const PANE = { x: 2 / 16, y: 1 / 16, w: 12 / 16, h: 13 / 16 };
+
 	const pct = (v: number, of: number) => `${((v / of) * 100).toFixed(4)}%`;
 	const pctX = (x: number) => pct(x, cols);
 	const pctY = (y: number) => pct(y, rows);
@@ -184,7 +187,7 @@
 				onclick={() => select(item, false)}
 				aria-label={item.alt}
 			>
-				<img src={item.src} alt="" draggable="false" />
+				<img src={isNight ? (kindOf(item.kindId).nightSprite ?? item.src) : item.src} alt="" draggable="false" />
 			</button>
 		{/each}
 
@@ -224,38 +227,41 @@
 			></div>
 		{/each}
 
-		{#if isWinter}
-			{#each ['a', 'b'] as layer (layer)}
+		{#each WINDOW_SPOTS as win, w (w)}
+			{#if isWinter}
+				{#each ['a', 'b'] as layer (layer)}
+					<div
+						class="lofi-snow lofi-snow-{layer}"
+						style:left={pctX(win.x + win.w * PANE.x)}
+						style:top={pctY(win.y + win.h * PANE.y)}
+						style:width={pctX(win.w * PANE.w)}
+						style:height={pctY(win.h * PANE.h)}
+						aria-hidden="true"
+					></div>
+				{/each}
+			{:else if isAutumn && !isNight}
 				<div
-					class="lofi-snow lofi-snow-{layer}"
-					style:left={pctX(WINDOW_SPOT.x + 0.15)}
-					style:top={pctY(WINDOW_SPOT.y + 0.15)}
-					style:width={pctX(WINDOW_SPOT.w - 0.3)}
-					style:height={pctY(WINDOW_SPOT.h - 0.275)}
+					class="lofi-leaves"
+					style:left={pctX(win.x + win.w * PANE.x)}
+					style:top={pctY(win.y + win.h * PANE.y)}
+					style:width={pctX(win.w * PANE.w)}
+					style:height={pctY(win.h * PANE.h)}
 					aria-hidden="true"
 				></div>
-			{/each}
-		{:else if isAutumn && !isNight}
-			<div
-				class="lofi-leaves"
-				style:left={pctX(WINDOW_SPOT.x + 0.15)}
-				style:top={pctY(WINDOW_SPOT.y + 0.15)}
-				style:width={pctX(WINDOW_SPOT.w - 0.3)}
-				style:height={pctY(WINDOW_SPOT.h - 0.275)}
-				aria-hidden="true"
-			></div>
-		{:else if isNight}
-			{#each ['a', 'b'] as layer (layer)}
-				<div
-					class="lofi-rain lofi-rain-{layer}"
-					style:left={pctX(WINDOW_SPOT.x + 0.15)}
-					style:top={pctY(WINDOW_SPOT.y + 0.15)}
-					style:width={pctX(WINDOW_SPOT.w - 0.3)}
-					style:height={pctY(WINDOW_SPOT.h - 0.275)}
-					aria-hidden="true"
-				></div>
-			{/each}
-		{/if}
+			{:else if isNight}
+				{#each ['a', 'b'] as layer (layer)}
+					<div
+						class="lofi-rain lofi-rain-{layer}"
+						style:left={pctX(win.x + win.w * PANE.x)}
+						style:top={pctY(win.y + win.h * PANE.y)}
+						style:width={pctX(win.w * PANE.w)}
+						style:height={pctY(win.h * PANE.h)}
+						aria-hidden="true"
+					></div>
+				{/each}
+			{/if}
+		{/each}
+
 		{#if isNight}
 			<div class="lofi-grain" aria-hidden="true"></div>
 		{/if}

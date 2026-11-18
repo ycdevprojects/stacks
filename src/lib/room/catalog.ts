@@ -8,7 +8,9 @@
 // kind never carries a hardcoded height — footprintH() derives the rendered /
 // footprint height as footprintW * spritePx.h / spritePx.w. Tests assert the
 // derivation holds for every placement.
-import windowImg from '$lib/assets/room/window.png';
+// Window panes painted with sky (scripts/draw-room-decor.py); window.png is their source.
+import windowImg from '$lib/assets/room/variants/window-day.png';
+import windowNightImg from '$lib/assets/room/variants/window-night.png';
 import posterImg from '$lib/assets/room/poster.png';
 import sleepingBagImg from '$lib/assets/room/sleeping-bag.png';
 import crateImg from '$lib/assets/room/crate.png';
@@ -119,6 +121,8 @@ export interface ItemKind {
 	 * uses `sprite`; the rest carry their own recoloured sprite.
 	 */
 	variants?: ItemVariant[];
+	/** Shown instead of `sprite` at night (same pixel size). */
+	nightSprite?: string;
 	alt: string;
 }
 
@@ -127,8 +131,9 @@ export const ITEM_KINDS = {
 		id: 'window',
 		label: 'Window',
 		sprite: windowImg,
+		nightSprite: windowNightImg,
 		spritePx: { w: 16, h: 16 },
-		footprintW: 0.85,
+		footprintW: 1,
 		zone: 'wall',
 		category: 'wall-art',
 		alt: 'Window with four panes'

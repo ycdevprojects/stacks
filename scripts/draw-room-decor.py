@@ -549,6 +549,25 @@ def shift_hue(
     out.save(VARIANTS / dst)
 
 
+def window_skies() -> None:
+    """Day and night versions of the window: the charcoal panes become sky."""
+    src = Image.open(ROOM / "window.png").convert("RGBA")
+    pane = (64, 64, 64, 255)
+    day_top, day_bottom = rgba("#7cc4ee"), rgba("#c4e6f8")
+    night_top, night_bottom = rgba("#141a3e"), rgba("#2a2560")
+    stars = {(4, 2), (11, 4), (3, 10), (12, 11), (9, 9)}
+    for name, top, bottom in [("window-day", day_top, day_bottom), ("window-night", night_top, night_bottom)]:
+        out = src.copy()
+        for y in range(src.height):
+            t = y / (src.height - 1)
+            sky = tuple(round(a + (b - a) * t) for a, b in zip(top[:3], bottom[:3])) + (255,)
+            for x in range(src.width):
+                if src.getpixel((x, y)) == pane:
+                    lit = name == "window-night" and (x, y) in stars
+                    out.putpixel((x, y), (235, 230, 255, 255) if lit else sky)
+        out.save(VARIANTS / f"{name}.png")
+
+
 def main() -> None:
     DECOR.mkdir(exist_ok=True)
     VARIANTS.mkdir(exist_ok=True)
@@ -562,6 +581,8 @@ def main() -> None:
     for metal, (light, mid, dark) in METALS.items():
         pal = {**PALETTE, "1": light, "2": mid, "3": dark}
         draw(TROPHY, pal).save(DECOR / f"trophy-{metal}.png")
+
+    window_skies()
 
     # Style variants: source, output, hue shift, min saturation, hue band, lightness, saturation scale
     shift_hue("rug.png", "rug-blue.png", 70, 0.15, (90, 180))

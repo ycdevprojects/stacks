@@ -70,6 +70,9 @@ npm run ios       # build the app files, sync, and open Xcode
 npm run android   # same, opening Android Studio
 ```
 
+The app icon and splash screens for web, iOS and Android all come from
+`python3 scripts/make-app-icons.py` (needs Pillow).
+
 Keep developing in the browser with `npm run dev`; run one of the commands above to try a change
 on a phone. Under the hood, `ADAPTER=static` builds plain files into `build/` and `cap sync` copies
 them and the plugins into both native projects.
@@ -77,7 +80,7 @@ them and the plugins into both native projects.
 You'll need Xcode for iOS and Android Studio for Android. Device features go through
 `src/lib/services/native.ts`, which falls back to the web version in a browser: haptics, and
 saving files through the share sheet (backups and the calendar export). Still web-only:
-reminder notifications (the apps don't show the switch yet), app icons and the splash screen.
+reminder notifications (the apps don't show the switch yet).
 
 ## How it works
 
@@ -154,7 +157,7 @@ src/
 │   ├── stores/             app.svelte.ts (state + actions), profile.ts (XP/badges), toast
 │   ├── types/              data model
 │   └── utils/              gamification, schedule, badges, templates, feedback, helpers
-├── routes/                 / (Today), /stacks, /stacks/[id], /stats, /room
+├── routes/                 / (Today), /room, /stacks, /stacks/[id], /stats
 └── sw.ts                   service worker (built to static/service-worker.js)
 ```
 

@@ -60,10 +60,12 @@
 	});
 
 	const TABS: { href: string; label: string; icon: IconName }[] = [
+		// Most-used first: the daily checklist, then the reward. Stats holds Settings, so it sits
+		// in the far-right "me" slot.
 		{ href: '/', label: 'Today', icon: 'today' },
+		{ href: '/room', label: 'Room', icon: 'room' },
 		{ href: '/stacks', label: 'Stacks', icon: 'stacks' },
-		{ href: '/stats', label: 'Stats', icon: 'stats' },
-		{ href: '/room', label: 'Room', icon: 'room' }
+		{ href: '/stats', label: 'Stats', icon: 'stats' }
 	];
 
 	const path = $derived(page.url.pathname);

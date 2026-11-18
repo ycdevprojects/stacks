@@ -127,7 +127,7 @@
 			<p class="text-2xl font-bold text-white tabular-nums">{app.completions.length.toLocaleString()}</p>
 			<p class="mt-0.5 text-[13px] text-slate-400">Habits logged</p>
 		</div>
-		<a href="/room#badges" class="card pressable p-4">
+		<a href="/room?tab=badges" class="card pressable p-4">
 			<p class="text-2xl font-bold text-white tabular-nums">{app.achievements.length}<span class="text-base text-slate-500">/{BADGES.length}</span></p>
 			<p class="mt-0.5 text-[13px] text-slate-400">Badges ›</p>
 		</a>
