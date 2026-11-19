@@ -14,6 +14,7 @@ export function announceBadges(badges: BadgeDefinition[], delayMs = 0): void {
 export function announceToggle(result: ToggleResult): void {
 	if (!result.completed) {
 		haptic(8);
+		if (result.xpDelta < 0) showToast('xp', `${result.xpDelta} XP`, undefined, '↩️');
 		return;
 	}
 	haptic(12);

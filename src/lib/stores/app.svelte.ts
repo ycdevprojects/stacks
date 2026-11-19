@@ -11,8 +11,10 @@ import {
 	checkAndUnlockAchievements,
 	checkIfFullStackToday,
 	isStackCompleteOnDate,
-	profileStreak
+	profileStreak,
+	replayXp
 } from './profile';
+import { levelFromXp } from '$lib/utils/gamification';
 import { canRestOn } from '$lib/utils/schedule';
 
 const LOCAL_USER_ID_KEY = 'stackr_local_user_id';
@@ -106,6 +108,19 @@ export async function initializeState(): Promise<void> {
 	// Bring the stored streak up to date (it can only shrink while the app is closed).
 	const live = profileStreak(profile, completions, habits);
 	if (live !== profile.streak_days) await saveProfile({ streak_days: live });
+	// One-time repair: a bug dropped XP for profiles with room styles or rest days, because
+	// those nested fields made the profile unsavable. Replay the history once and keep the
+	// larger total. Only once, so later schedule edits can't re-award old bonuses.
+	if (!profile.xp_repaired && (profile.room_styles || profile.rest_days?.length)) {
+		const replayed = replayXp(completions, stacks, habits, profile.rest_days ?? []);
+		const xp = Math.max(profile.xp, replayed);
+		await saveProfile({
+			xp,
+			level: levelFromXp(xp),
+			total_completions: Math.max(profile.total_completions, completions.length),
+			xp_repaired: true
+		});
+	}
 	// Quietly catch up on badges earned before they were tracked (older versions, imports).
 	await unlockAchievements();
 }
@@ -252,7 +267,8 @@ export async function toggleCompletion(habitId: string, date: string = today): P
 	if (pending.has(key) || !profile) return null;
 	pending.add(key);
 	try {
-		const before = profile;
+		// A plain copy: the profile functions spread it and save it to IndexedDB.
+		const before: Profile = $state.snapshot(profile);
 		const existing = completions.find((c) => c.habit_id === habitId && c.completed_at === date);
 
 		if (existing) {

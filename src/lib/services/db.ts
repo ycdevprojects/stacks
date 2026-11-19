@@ -161,7 +161,9 @@ export async function deleteCompletion(id: string): Promise<void> {
 }
 
 export async function saveProfile(profile: Profile): Promise<void> {
-	await (await getDB()).put('profile', profile);
+	// Copy to plain data first: a profile that came from Svelte state carries reactive
+	// proxies in its nested fields (room_styles, rest_days), which IndexedDB can't clone.
+	await (await getDB()).put('profile', JSON.parse(JSON.stringify(profile)) as Profile);
 }
 
 export async function saveAchievement(achievement: Achievement): Promise<void> {

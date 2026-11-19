@@ -52,6 +52,8 @@ export interface Profile {
 	rest_days?: string[];
 	/** Chosen style per room placement id, e.g. { rug: 'blue' }. */
 	room_styles?: Record<string, string>;
+	/** Set once the one-time XP repair (see initializeState) has run. */
+	xp_repaired?: boolean;
 	created_at: string;
 	updated_at: string;
 }

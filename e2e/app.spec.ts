@@ -233,3 +233,44 @@ test('petting an animal floats a heart', async ({ page }) => {
 	await expect(page.locator('[data-test="lofi-item-cat"] .lofi-heart')).toBeVisible();
 	await expect(page.getByRole('status')).toContainText('Cat');
 });
+
+// Regression: room styles and rest days are nested profile fields, which once made the
+// profile unsavable — check-offs stuck but XP silently never updated.
+test('XP still saves for a profile with room styles and a rest day', async ({ page }) => {
+	await openApp(page);
+	await page.getByRole('button', { name: /Wind Down/ }).click();
+	// The stack shows once it's saved; only then is it safe to reload.
+	await expect(page.getByRole('region', { name: 'Wind Down' })).toBeVisible();
+	const readXp = () =>
+		page.evaluate(async () => {
+			const uid = localStorage.getItem('stackr_local_user_id')!;
+			const db = await new Promise<IDBDatabase>((r) => {
+				const q = indexedDB.open('stackr');
+				q.onsuccess = () => r(q.result);
+			});
+			const p = await new Promise<{ xp: number }>((r) => {
+				const g = db.transaction('profile').objectStore('profile').get(uid);
+				g.onsuccess = () => r(g.result);
+			});
+			db.close();
+			return p.xp;
+		});
+
+	// Give the profile a room style and a rest day through the app itself.
+	await page.goto('/room');
+	await page.getByTestId('pick-styles').click();
+	await page.getByRole('dialog', { name: /Style your/ }).getByTestId('style-options').getByRole('button').nth(1).click();
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await page.goto('/');
+	await page.waitForSelector('nav[aria-label="Main"]');
+	await page.getByTestId('take-rest-day').click();
+	await expect(page.getByTestId('rest-banner')).toBeVisible();
+
+	const before = await readXp();
+	await page.getByRole('button', { name: 'Read 5 pages' }).click();
+	await expect(page.getByText(/^\+\d+ XP$/)).toBeVisible();
+	await expect.poll(readXp).toBeGreaterThan(before);
+	await page.getByRole('button', { name: 'Read 5 pages' }).click();
+	await expect(page.getByText(/^-\d+ XP$/)).toBeVisible();
+	await expect.poll(readXp).toBe(before);
+});

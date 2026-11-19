@@ -98,8 +98,13 @@
 	}
 
 	async function toggle(habitId: string) {
-		const result = await toggleCompletion(habitId, selectedDate);
-		if (result) announceToggle(result);
+		try {
+			const result = await toggleCompletion(habitId, selectedDate);
+			if (result) announceToggle(result);
+		} catch (e) {
+			console.error('Saving a check-off failed:', e);
+			showToast('error', 'Couldn’t save that', 'Try again — if it keeps happening, export a backup in Settings.', '⚠️');
+		}
 	}
 
 	function addHabit(stack: Stack) {
