@@ -11,7 +11,7 @@ import {
 	XP_STREAK_PER_DAY,
 	MAX_STREAK_BONUS
 } from '$lib/utils/gamification';
-import { generateId, today } from '$lib/utils/helpers';
+import { generateId, today, toDateStr } from '$lib/utils/helpers';
 import { checkAllAchievements } from '$lib/utils/badges';
 import { dueHabits, overallExcuse } from '$lib/utils/schedule';
 
@@ -243,4 +243,40 @@ export async function checkAndUnlockAchievements(
 	}
 
 	return { newAchievements, badgeKeys };
+}
+/**
+ * Rebuild total XP from the check-off history, using the same rules as
+ * calculateCompletionXP: +10 per check-off, +25 per stack completed on a day,
+ * and the once-a-day streak bonus for days checked off on the day itself (not
+ * backfilled later). Used to repair XP that failed to save; it can only
+ * under-count (deleted habits take their history with them), so callers
+ * should keep the larger of this and the stored XP.
+ */
+export function replayXp(
+	completions: Completion[],
+	stacks: Stack[],
+	habits: Habit[],
+	restDays: readonly string[] = []
+): number {
+	const byDate = new Map<string, Completion[]>();
+	for (const c of completions) {
+		const list = byDate.get(c.completed_at);
+		if (list) list.push(c);
+		else byDate.set(c.completed_at, [c]);
+	}
+	const excuse = overallExcuse(habits, restDays);
+	const seenDates: string[] = [];
+	let xp = 0;
+	for (const date of [...byDate.keys()].sort()) {
+		const list = byDate.get(date)!;
+		seenDates.push(date);
+		xp += XP_PER_HABIT * list.length;
+		xp += XP_STACK_BONUS * stacks.filter((s) => isStackCompleteOnDate(s.id, habits, completions, date)).length;
+		const loggedSameDay = list.some((c) => toDateStr(new Date(c.created_at)) === date);
+		if (loggedSameDay) {
+			const streak = calculateStreak(seenDates, excuse, date);
+			xp += Math.min(streak * XP_STREAK_PER_DAY, MAX_STREAK_BONUS);
+		}
+	}
+	return xp;
 }

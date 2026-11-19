@@ -2,7 +2,8 @@ import { isNative, nativeHaptic } from '$lib/services/native';
 
 // Date, color, id and device utilities.
 
-function toDateStr(d: Date): string {
+/** A Date's local calendar date as YYYY-MM-DD. */
+export function toDateStr(d: Date): string {
 	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
